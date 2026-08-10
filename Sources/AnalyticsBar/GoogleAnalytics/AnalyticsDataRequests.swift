@@ -25,7 +25,7 @@ struct AnalyticsRunReportRequest: Encodable, Sendable {
     let metrics: [AnalyticsNameRequest]
     let dateRanges: [AnalyticsDateRangeRequest]
     let orderBys: [AnalyticsMetricOrderRequest]?
-    let limit: Int?
+    let limit: String?
 
     init(
         dimensions: [String] = [],
@@ -47,7 +47,7 @@ struct AnalyticsRunReportRequest: Encodable, Sendable {
         } else {
             orderBys = nil
         }
-        self.limit = limit
+        self.limit = limit.map(String.init)
     }
 }
 

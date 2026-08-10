@@ -10,6 +10,7 @@ enum RefreshTrigger: Sendable {
 enum AnalyticsRepositoryError: Error, Equatable, LocalizedError, Sendable {
     case noData
     case authorizationExpired
+    case requestFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +18,8 @@ enum AnalyticsRepositoryError: Error, Equatable, LocalizedError, Sendable {
             return "No Analytics data is available yet."
         case .authorizationExpired:
             return "Google authorization expired. Please reconnect."
+        case let .requestFailed(message):
+            return message
         }
     }
 }
@@ -104,7 +107,12 @@ actor AnalyticsRepository: AnalyticsRepositoryProtocol {
             }
         }
 
-        guard !snapshots.isEmpty else { throw AnalyticsRepositoryError.noData }
+        guard !snapshots.isEmpty else {
+            if let message = outcomes.compactMap(\.requestFailureMessage).first {
+                throw AnalyticsRepositoryError.requestFailed(message)
+            }
+            throw AnalyticsRepositoryError.noData
+        }
         try await cache.save(snapshots)
         return DashboardAggregator.aggregate(snapshots)
     }
@@ -120,5 +128,12 @@ actor AnalyticsRepository: AnalyticsRepositoryProtocol {
     func disconnect() async throws {
         try await oauthSession.signOut()
         try await cache.clear()
+    }
+}
+
+private extension PropertyRefreshOutcome {
+    var requestFailureMessage: String? {
+        guard case let .failure(_, .requestFailed(message)) = self else { return nil }
+        return message
     }
 }

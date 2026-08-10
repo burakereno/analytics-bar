@@ -2,6 +2,7 @@ import Foundation
 
 enum GoogleAPIError: Error, Equatable, LocalizedError, Sendable {
     case invalidResponse
+    case badRequest(String)
     case authorizationExpired
     case permissionDenied
     case rateLimited(retryAfter: TimeInterval?)
@@ -12,6 +13,8 @@ enum GoogleAPIError: Error, Equatable, LocalizedError, Sendable {
         switch self {
         case .invalidResponse:
             return "Google returned an unreadable response."
+        case let .badRequest(message):
+            return message
         case .authorizationExpired:
             return "Google authorization expired. Please reconnect."
         case .permissionDenied:
@@ -30,9 +33,20 @@ enum GoogleAPIError: Error, Equatable, LocalizedError, Sendable {
 }
 
 enum GoogleHTTPStatusMapper {
-    static func error(for response: HTTPURLResponse) -> GoogleAPIError? {
+    private struct ErrorEnvelope: Decodable {
+        struct Details: Decodable { let message: String }
+        let error: Details
+    }
+
+    static func error(for response: HTTPURLResponse, data: Data = Data()) -> GoogleAPIError? {
         guard !(200..<300).contains(response.statusCode) else { return nil }
         switch response.statusCode {
+        case 400:
+            if let envelope = try? JSONDecoder().decode(ErrorEnvelope.self, from: data),
+               !envelope.error.message.isEmpty {
+                return .badRequest(envelope.error.message)
+            }
+            return .badRequest("Google Analytics rejected the report request.")
         case 401:
             return .authorizationExpired
         case 403:

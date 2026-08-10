@@ -168,7 +168,7 @@ struct AnalyticsDataClient: AnalyticsDataClientProtocol, Sendable {
         while true {
             attempt += 1
             let (data, response) = try await httpClient.data(for: request)
-            if let error = GoogleHTTPStatusMapper.error(for: response) {
+            if let error = GoogleHTTPStatusMapper.error(for: response, data: data) {
                 let retryDelay: TimeInterval?
                 switch error {
                 case let .rateLimited(retryAfter):

@@ -30,6 +30,35 @@ final class AnalyticsRepositoryTests: XCTestCase {
         XCTAssertEqual(snapshot.live.activeUsers, 21)
         XCTAssertNotNil(snapshot.properties[1].refreshMessage)
     }
+
+    func testNoSuccessfulPropertySurfacesRequestFailure() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AnalyticsBarRepositoryTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let repository = AnalyticsRepository(
+            oauthSession: TestOAuthSession(),
+            adminClient: TestAdminClient(),
+            refreshCoordinator: PropertyRefreshCoordinator(
+                dataClient: BehaviorAnalyticsDataClient(failingPropertyID: "2"),
+                maximumConcurrency: 3
+            ),
+            cache: DashboardCache(directoryURL: directory)
+        )
+
+        do {
+            _ = try await repository.refreshSelectedProperties(
+                [TestAnalyticsFixtures.property("2")],
+                trigger: .manual,
+                now: Date(timeIntervalSince1970: 2_000)
+            )
+            XCTFail("Expected the property request failure")
+        } catch {
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Google Analytics is temporarily rate limited."
+            )
+        }
+    }
 }
 
 private actor TestOAuthSession: OAuthSessionProviding {

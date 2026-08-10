@@ -42,7 +42,10 @@ final class AnalyticsDataClientTests: XCTestCase {
             XCTAssertEqual(url.absoluteString, "https://analyticsdata.googleapis.com/v1beta/properties/101:batchRunReports")
             let body = try XCTUnwrap(request.httpBody)
             let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
-            XCTAssertEqual((object["requests"] as? [Any])?.count, 4)
+            let requests = try XCTUnwrap(object["requests"] as? [[String: Any]])
+            XCTAssertEqual(requests.count, 4)
+            XCTAssertEqual(requests[2]["limit"] as? String, "5")
+            XCTAssertEqual(requests[3]["limit"] as? String, "5")
 
             let json = """
             {
@@ -116,6 +119,35 @@ final class AnalyticsDataClientTests: XCTestCase {
 
         XCTAssertEqual(totals.activeUsers, 1)
         XCTAssertEqual(attempts.value, 2)
+    }
+
+    func testCoreBadRequestSurfacesGoogleMessage() async throws {
+        let http = TestHTTPClient { request in
+            let json = """
+            {
+              "error": {
+                "code": 400,
+                "message": "Metric totalRevenue is incompatible with dimension dateHour.",
+                "status": "INVALID_ARGUMENT"
+              }
+            }
+            """
+            return (
+                Data(json.utf8),
+                TestHTTPClient.response(url: request.url!, status: 400)
+            )
+        }
+        let client = AnalyticsDataClient(httpClient: http, retryPolicy: .immediate)
+
+        do {
+            _ = try await client.fetchCore(property: property, now: Date(), accessToken: "access")
+            XCTFail("Expected the Google validation message")
+        } catch {
+            XCTAssertEqual(
+                error as? GoogleAPIError,
+                .badRequest("Metric totalRevenue is incompatible with dimension dateHour.")
+            )
+        }
     }
 
     private var property: AnalyticsProperty {

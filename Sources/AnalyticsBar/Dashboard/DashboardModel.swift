@@ -1,8 +1,14 @@
 import Combine
 import Foundation
+import OSLog
 
 @MainActor
 final class DashboardModel: ObservableObject {
+    private static let logger = Logger(
+        subsystem: AppConfiguration.bundleIdentifier,
+        category: "dashboard"
+    )
+
     enum ConnectionIssue: Equatable {
         case cancelled(String)
         case configuration(String)
@@ -159,6 +165,7 @@ final class DashboardModel: ObservableObject {
             )
             state = .loaded
         } catch {
+            Self.logger.error("Analytics refresh failed: \(error.localizedDescription, privacy: .public)")
             if trigger == .manual { lastManualError = error.localizedDescription }
             if snapshot != nil {
                 state = .loaded
