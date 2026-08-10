@@ -1,3 +1,5 @@
+import Foundation
+
 enum AppConfiguration {
     static let appName = "Analytics Bar"
     static let executableName = "AnalyticsBar"
@@ -8,4 +10,8 @@ enum AppConfiguration {
     static let dmgAssetName = "AnalyticsBar.dmg"
     static let manifestAssetName = "AnalyticsBar.dmg.update.json"
     static let analyticsReadonlyScope = "https://www.googleapis.com/auth/analytics.readonly"
+
+    static var marketingVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+    }
 }
