@@ -16,7 +16,11 @@ struct AnalyticsMinuteRangeRequest: Encodable, Sendable {
 }
 
 struct AnalyticsMetricOrderRequest: Encodable, Sendable {
-    let metric: AnalyticsNameRequest
+    struct Metric: Encodable, Sendable {
+        let metricName: String
+    }
+
+    let metric: Metric
     let desc: Bool
 }
 
@@ -40,7 +44,7 @@ struct AnalyticsRunReportRequest: Encodable, Sendable {
         if let orderByMetric {
             orderBys = [
                 AnalyticsMetricOrderRequest(
-                    metric: AnalyticsNameRequest(name: orderByMetric),
+                    metric: AnalyticsMetricOrderRequest.Metric(metricName: orderByMetric),
                     desc: true
                 )
             ]

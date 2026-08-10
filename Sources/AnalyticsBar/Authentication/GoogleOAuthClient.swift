@@ -1,6 +1,12 @@
 import Foundation
+import OSLog
 
 actor GoogleOAuthClient {
+    private static let logger = Logger(
+        subsystem: AppConfiguration.bundleIdentifier,
+        category: "oauth"
+    )
+
     private struct TokenResponse: Decodable {
         let accessToken: String
         let refreshToken: String?
@@ -82,7 +88,14 @@ actor GoogleOAuthClient {
     }
 
     func hasStoredAuthorization() async -> Bool {
-        (try? tokenStore.load()) != nil
+        do {
+            return try tokenStore.load() != nil
+        } catch {
+            Self.logger.error(
+                "Stored OAuth token is unavailable: \(String(describing: error), privacy: .public)"
+            )
+            return false
+        }
     }
 
     func signOut() async throws {

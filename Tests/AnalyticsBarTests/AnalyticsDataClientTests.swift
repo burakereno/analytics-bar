@@ -46,6 +46,14 @@ final class AnalyticsDataClientTests: XCTestCase {
             XCTAssertEqual(requests.count, 4)
             XCTAssertEqual(requests[2]["limit"] as? String, "5")
             XCTAssertEqual(requests[3]["limit"] as? String, "5")
+            let pageOrderBys = try XCTUnwrap(requests[2]["orderBys"] as? [[String: Any]])
+            let pageMetric = try XCTUnwrap(pageOrderBys.first?["metric"] as? [String: Any])
+            XCTAssertEqual(pageMetric["metricName"] as? String, "screenPageViews")
+            XCTAssertNil(pageMetric["name"])
+            let sourceOrderBys = try XCTUnwrap(requests[3]["orderBys"] as? [[String: Any]])
+            let sourceMetric = try XCTUnwrap(sourceOrderBys.first?["metric"] as? [String: Any])
+            XCTAssertEqual(sourceMetric["metricName"] as? String, "sessions")
+            XCTAssertNil(sourceMetric["name"])
 
             let json = """
             {
