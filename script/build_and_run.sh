@@ -12,6 +12,7 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_BUNDLE="$DIST_DIR/$DISPLAY_NAME.app"
 APP_CONTENTS="$APP_BUNDLE/Contents"
 APP_MACOS="$APP_CONTENTS/MacOS"
+APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
 
@@ -22,9 +23,11 @@ BUILD_DIR="$(swift build --package-path "$ROOT_DIR" --show-bin-path)"
 BUILD_BINARY="$BUILD_DIR/$APP_NAME"
 
 rm -rf "$APP_BUNDLE"
-mkdir -p "$APP_MACOS"
+mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
+cp "$ROOT_DIR/scripts/install-update.sh" "$APP_RESOURCES/install-update.sh"
+chmod +x "$APP_RESOURCES/install-update.sh"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -54,7 +57,17 @@ cat >"$INFO_PLIST" <<PLIST
 PLIST
 
 open_app() {
-  /usr/bin/open -n "$APP_BUNDLE"
+  open_arguments=(-n)
+  if [[ -n "${ANALYTICS_BAR_FIXTURE:-}" ]]; then
+    open_arguments+=(--env "ANALYTICS_BAR_FIXTURE=$ANALYTICS_BAR_FIXTURE")
+  fi
+  if [[ -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]]; then
+    open_arguments+=(--env "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID")
+  fi
+  if [[ -n "${GOOGLE_OAUTH_CLIENT_SECRET:-}" ]]; then
+    open_arguments+=(--env "GOOGLE_OAUTH_CLIENT_SECRET=$GOOGLE_OAUTH_CLIENT_SECRET")
+  fi
+  /usr/bin/open "${open_arguments[@]}" "$APP_BUNDLE"
 }
 
 case "$MODE" in
