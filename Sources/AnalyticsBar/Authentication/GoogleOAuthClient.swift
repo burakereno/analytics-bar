@@ -81,11 +81,11 @@ actor GoogleOAuthClient {
         return try await refreshAccessToken(using: token).accessToken
     }
 
-    func hasStoredAuthorization() -> Bool {
+    func hasStoredAuthorization() async -> Bool {
         (try? tokenStore.load()) != nil
     }
 
-    func signOut() throws {
+    func signOut() async throws {
         try tokenStore.delete()
     }
 
@@ -141,3 +141,13 @@ actor GoogleOAuthClient {
         )
     }
 }
+
+protocol OAuthSessionProviding: Sendable {
+    func signIn() async throws -> GoogleOAuthToken
+    func validAccessToken() async throws -> String
+    func forceRefreshAccessToken() async throws -> String
+    func hasStoredAuthorization() async -> Bool
+    func signOut() async throws
+}
+
+extension GoogleOAuthClient: OAuthSessionProviding {}
