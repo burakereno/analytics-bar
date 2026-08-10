@@ -7,20 +7,27 @@ struct DashboardView: View {
     @ObservedObject private var systemSettings: SystemSettingsController
     @ObservedObject private var updateChecker: UpdateChecker
     @ObservedObject private var updateInstaller: UpdateInstaller
+    let onPreferredHeightChange: (CGFloat) -> Void
     @State private var showingSettings = false
+    @State private var headerHeight: CGFloat = 0
+    @State private var dashboardContentHeight: CGFloat = 0
+    @State private var settingsContentHeight: CGFloat = 0
+    @State private var lastReportedHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         model: DashboardModel,
         systemSettings: SystemSettingsController,
         updateChecker: UpdateChecker,
-        updateInstaller: UpdateInstaller
+        updateInstaller: UpdateInstaller,
+        onPreferredHeightChange: @escaping (CGFloat) -> Void = { _ in }
     ) {
         self.model = model
         preferences = model.preferences
         self.systemSettings = systemSettings
         self.updateChecker = updateChecker
         self.updateInstaller = updateInstaller
+        self.onPreferredHeightChange = onPreferredHeightChange
     }
 
     private var propertyCount: Int {
@@ -34,34 +41,71 @@ struct DashboardView: View {
                 showingSettings: showingSettings,
                 toggleSettings: { withAnimation(transitionAnimation) { showingSettings.toggle() } }
             )
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                headerHeight = height
+                reportPreferredHeight()
+            }
 
             Divider().opacity(0.45)
 
-            Group {
+            ZStack {
                 if showingSettings {
-                    SettingsView(
-                        model: model,
-                        preferences: preferences,
-                        systemSettings: systemSettings,
-                        updateChecker: updateChecker,
-                        updateInstaller: updateInstaller,
-                        close: { withAnimation(transitionAnimation) { showingSettings = false } }
-                    )
+                    ScrollView {
+                        SettingsView(
+                            model: model,
+                            preferences: preferences,
+                            systemSettings: systemSettings,
+                            updateChecker: updateChecker,
+                            updateInstaller: updateInstaller,
+                            close: { withAnimation(transitionAnimation) { showingSettings = false } }
+                        )
+                        .onGeometryChange(for: CGFloat.self) { proxy in
+                            proxy.size.height
+                        } action: { height in
+                            settingsContentHeight = height
+                            reportPreferredHeight()
+                        }
+                    }
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
                 } else {
-                    content
-                        .transition(.opacity.combined(with: .move(edge: .leading)))
+                    ScrollView {
+                        content
+                            .onGeometryChange(for: CGFloat.self) { proxy in
+                                proxy.size.height
+                            } action: { height in
+                                dashboardContentHeight = height
+                                reportPreferredHeight()
+                            }
+                    }
+                    .transition(.opacity.combined(with: .move(edge: .leading)))
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
         }
         .frame(width: PopoverLayout.width)
         .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(.dark)
+        .onChange(of: showingSettings) { _, _ in reportPreferredHeight() }
     }
 
     private var transitionAnimation: Animation? {
         reduceMotion ? nil : .snappy(duration: 0.24)
+    }
+
+    private func reportPreferredHeight() {
+        let bodyHeight = showingSettings ? settingsContentHeight : dashboardContentHeight
+        guard headerHeight > 0, bodyHeight > 0 else { return }
+        let preferredHeight = PopoverLayout.preferredHeight(
+            header: headerHeight,
+            body: bodyHeight,
+            dividerCount: 1
+        )
+        guard abs(lastReportedHeight - preferredHeight) > 0.5 else { return }
+        lastReportedHeight = preferredHeight
+        onPreferredHeightChange(preferredHeight)
     }
 
     @ViewBuilder
@@ -108,8 +152,7 @@ struct DashboardView: View {
     }
 
     private func loadedDashboard(_ snapshot: CombinedDashboardSnapshot) -> some View {
-        ScrollView {
-            LazyVStack(spacing: 10) {
+        LazyVStack(spacing: 10) {
                 if let error = model.lastManualError {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 9, weight: .medium))
@@ -142,9 +185,8 @@ struct DashboardView: View {
                     updateChecker: updateChecker,
                     updateInstaller: updateInstaller
                 )
-            }
-            .padding(12)
         }
+        .padding(12)
     }
 
     private var loadingView: some View {
@@ -154,7 +196,7 @@ struct DashboardView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 160)
     }
 
     private func messageView(icon: String, title: String, detail: String) -> some View {
@@ -169,7 +211,7 @@ struct DashboardView: View {
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 280)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, minHeight: 180)
         .padding(20)
     }
 }

@@ -54,15 +54,13 @@ struct PropertySelectionView: View {
                 .padding(.horizontal, 14)
                 .padding(.bottom, 8)
 
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    ForEach(accounts, id: \.resourceName) { account in
-                        accountSection(account)
-                    }
+            LazyVStack(spacing: 10) {
+                ForEach(accounts, id: \.resourceName) { account in
+                    accountSection(account)
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
             }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 12)
 
             Divider().opacity(0.5)
             HStack {

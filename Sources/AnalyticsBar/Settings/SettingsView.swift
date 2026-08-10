@@ -10,8 +10,7 @@ struct SettingsView: View {
     let close: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
                 settingsSection("CONNECTION") {
                     ConnectionSettingsView(model: model, close: close)
                 }
@@ -72,9 +71,8 @@ struct SettingsView: View {
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.secondary)
                 }
-            }
-            .padding(14)
         }
+        .padding(14)
     }
 
     private func settingsSection<Content: View>(
