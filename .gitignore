@@ -1,0 +1,12 @@
+.build/
+.swiftpm/
+dist/
+.DS_Store
+.env.local
+*.p12
+*.cer
+*.certSigningRequest
+*.keychain-db
+*.dmg
+*.update.json
+DerivedData/
