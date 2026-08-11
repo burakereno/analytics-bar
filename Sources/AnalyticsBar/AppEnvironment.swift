@@ -13,16 +13,30 @@ struct AppEnvironment {
         bundle: Bundle = .main,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> AppEnvironment {
+#if DEBUG
+        let fixtureSnapshots = environment["ANALYTICS_BAR_FIXTURE"]
+            .flatMap(DashboardPreviewFixtures.snapshots(named:))
+        let preferences: AppPreferences
+        if let fixtureSnapshots {
+            let suiteName = "com.burakerenoglu.AnalyticsBar.VisualPreview"
+            let previewDefaults = UserDefaults(suiteName: suiteName)!
+            previewDefaults.removePersistentDomain(forName: suiteName)
+            preferences = AppPreferences(defaults: previewDefaults)
+            preferences.selectedPropertyResourceNames = fixtureSnapshots.map(\.property.resourceName)
+            preferences.showsDockIcon = environment["ANALYTICS_BAR_SETTINGS_PREVIEW"] == "1"
+        } else {
+            preferences = AppPreferences()
+        }
+#else
         let preferences = AppPreferences()
+#endif
         let scheduler = RefreshScheduler()
         let systemSettings = SystemSettingsController(preferences: preferences)
         let updateInstaller = UpdateInstaller()
 
 #if DEBUG
-        if let fixture = environment["ANALYTICS_BAR_FIXTURE"],
-           let snapshots = DashboardPreviewFixtures.snapshots(named: fixture) {
-            preferences.selectedPropertyResourceNames = snapshots.map(\.property.resourceName)
-            let repository = FixtureAnalyticsRepository(snapshots: snapshots)
+        if let fixtureSnapshots {
+            let repository = FixtureAnalyticsRepository(snapshots: fixtureSnapshots)
             let updateChecker = UpdateChecker()
             return AppEnvironment(
                 model: DashboardModel(

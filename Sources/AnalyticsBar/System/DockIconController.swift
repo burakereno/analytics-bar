@@ -9,7 +9,10 @@ protocol DockActivationPolicyApplying: AnyObject {
 @MainActor
 final class AppKitDockActivationPolicyApplier: DockActivationPolicyApplying {
     func apply(_ policy: NSApplication.ActivationPolicy) -> Bool {
-        NSApplication.shared.setActivationPolicy(policy)
+        if NSApplication.shared.activationPolicy() == policy {
+            return true
+        }
+        return NSApplication.shared.setActivationPolicy(policy)
     }
 }
 

@@ -21,9 +21,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         self.model = model
         self.preferences = preferences
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let opensSettingsPreview = ProcessInfo.processInfo.environment["ANALYTICS_BAR_SETTINGS_PREVIEW"] == "1"
+        let opensPopoverPreview = opensSettingsPreview
+            || ProcessInfo.processInfo.environment["ANALYTICS_BAR_POPOVER_PREVIEW"] == "1"
         super.init()
 
-        popover.behavior = .transient
+        popover.behavior = opensPopoverPreview ? .applicationDefined : .transient
         popover.animates = true
         popover.delegate = self
         popover.appearance = NSAppearance(named: .darkAqua)
@@ -37,6 +40,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 systemSettings: systemSettings,
                 updateChecker: updateChecker,
                 updateInstaller: updateInstaller,
+                startsInSettings: opensSettingsPreview,
                 onPreferredHeightChange: { [weak self] height in
                     self?.updatePopoverHeight(height)
                 }
@@ -59,6 +63,15 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 self?.updateStatusItem(title: title)
             }
             .store(in: &cancellables)
+
+        if opensPopoverPreview {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self, weak button] in
+                guard let self, let button else { return }
+                NSApp.setActivationPolicy(.regular)
+                NSApp.activate(ignoringOtherApps: true)
+                self.presentPopover(relativeTo: button)
+            }
+        }
     }
 
     @objc private func togglePopover(_ sender: NSStatusBarButton) {
@@ -67,6 +80,10 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             return
         }
 
+        presentPopover(relativeTo: sender)
+    }
+
+    private func presentPopover(relativeTo sender: NSStatusBarButton) {
         applyPreferredPopoverHeight(for: sender.window?.screen)
         popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()

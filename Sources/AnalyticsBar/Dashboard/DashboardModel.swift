@@ -57,6 +57,7 @@ final class DashboardModel: ObservableObject {
     private let repository: any AnalyticsRepositoryProtocol
     private let scheduler: RefreshScheduler
     private var cancellables = Set<AnyCancellable>()
+    private var selectionRefreshTask: Task<Void, Never>?
 
     init(
         repository: any AnalyticsRepositoryProtocol,
@@ -128,12 +129,9 @@ final class DashboardModel: ObservableObject {
     }
 
     func confirmSelection(_ resourceNames: [String]) async {
-        let uniqueNames = resourceNames.reduce(into: [String]()) { result, name in
-            if !result.contains(name) { result.append(name) }
-        }
-        let validNames = uniqueNames.filter { name in
-            availableProperties.contains(where: { $0.resourceName == name })
-        }
+        selectionRefreshTask?.cancel()
+        selectionRefreshTask = nil
+        let validNames = validSelection(resourceNames)
         guard !validNames.isEmpty else {
             state = .selectingProperties(availableProperties)
             return
@@ -142,6 +140,25 @@ final class DashboardModel: ObservableObject {
         preferences.selectedPropertyResourceNames = validNames
         await refresh(trigger: .manual)
         scheduler.start()
+    }
+
+    func updateSelection(_ resourceNames: [String]) {
+        let validNames = validSelection(resourceNames)
+        guard !validNames.isEmpty else { return }
+
+        preferences.selectedPropertyResourceNames = validNames
+        selectionRefreshTask?.cancel()
+        selectionRefreshTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(350))
+            } catch {
+                return
+            }
+            guard let self, !Task.isCancelled else { return }
+            await self.refresh(trigger: .manual)
+            self.scheduler.start()
+            self.selectionRefreshTask = nil
+        }
     }
 
     func showPropertySelection() {
@@ -188,6 +205,8 @@ final class DashboardModel: ObservableObject {
     }
 
     func disconnect() async {
+        selectionRefreshTask?.cancel()
+        selectionRefreshTask = nil
         scheduler.stop()
         do { try await repository.disconnect() } catch {}
         preferences.selectedPropertyResourceNames = []
@@ -201,6 +220,15 @@ final class DashboardModel: ObservableObject {
     private var selectedProperties: [AnalyticsProperty] {
         preferences.selectedPropertyResourceNames.compactMap { resourceName in
             availableProperties.first(where: { $0.resourceName == resourceName })
+        }
+    }
+
+    private func validSelection(_ resourceNames: [String]) -> [String] {
+        let uniqueNames = resourceNames.reduce(into: [String]()) { result, name in
+            if !result.contains(name) { result.append(name) }
+        }
+        return uniqueNames.filter { name in
+            availableProperties.contains(where: { $0.resourceName == name })
         }
     }
 }

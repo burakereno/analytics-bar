@@ -10,93 +10,83 @@ struct SettingsView: View {
     let close: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-                settingsSection("CONNECTION") {
-                    ConnectionSettingsView(model: model, close: close)
+        VStack(alignment: .leading, spacing: 8) {
+            SettingsSectionCard("STARTUP") {
+                SettingsToggleRow(
+                    icon: "power",
+                    title: "Open at Login",
+                    subtitle: "Open Analytics Bar when you log in",
+                    isOn: $preferences.opensAtLogin
+                )
+                if let error = systemSettings.launchAtLoginError {
+                    SettingsErrorText(message: error)
                 }
+            }
 
-                settingsSection("PROPERTIES") {
-                    PropertySettingsView(model: model, close: close)
-                }
+            SettingsSectionCard("CONNECTION") {
+                ConnectionSettingsView(model: model, close: close)
+            }
 
-                settingsSection("MENU BAR") {
-                    Picker("Metric", selection: $preferences.menuBarMetric) {
-                        ForEach(MenuBarMetric.allCases, id: \.self) { metric in
-                            Text(metric.title).tag(metric)
-                        }
-                    }
-                }
+            SettingsSectionCard("PROPERTIES") {
+                PropertySettingsView(model: model)
+            }
 
-                settingsSection("REFRESH") {
-                    Picker("Background", selection: $preferences.backgroundRefreshInterval) {
-                        ForEach(BackgroundRefreshInterval.allCases, id: \.self) { interval in
-                            Text(interval.title).tag(interval)
-                        }
-                    }
-                    Text("Refreshes every 60 seconds while the popover is open.")
-                        .font(.system(size: 8))
-                        .foregroundStyle(.tertiary)
-                }
+            SettingsSectionCard("MENU BAR") {
+                SettingsMenuRow(
+                    icon: "menubar.rectangle",
+                    title: "Display",
+                    subtitle: "Choose the metric shown in the menu bar",
+                    options: MenuBarMetric.allCases,
+                    selection: $preferences.menuBarMetric,
+                    optionTitle: { $0.title }
+                )
+            }
 
-                settingsSection("DASHBOARD") {
-                    Toggle("Show revenue", isOn: $preferences.showsRevenue)
-                }
+            SettingsSectionCard("REFRESH") {
+                SettingsSegmentedRow(
+                    icon: "arrow.clockwise",
+                    title: "Background",
+                    subtitle: "Every 60 seconds while this panel is open",
+                    options: BackgroundRefreshInterval.allCases,
+                    selection: $preferences.backgroundRefreshInterval,
+                    optionTitle: { $0.shortTitle }
+                )
+            }
 
-                settingsSection("STARTUP") {
-                    Toggle("Open at login", isOn: $preferences.opensAtLogin)
-                    if let error = systemSettings.launchAtLoginError {
-                        Text(error)
-                            .font(.system(size: 8))
-                            .foregroundStyle(.red)
-                    }
-                }
+            SettingsSectionCard("DASHBOARD") {
+                SettingsToggleRow(
+                    icon: "turkishlirasign.circle",
+                    title: "Revenue",
+                    subtitle: "Show total revenue in the dashboard",
+                    isOn: $preferences.showsRevenue
+                )
+            }
 
-                settingsSection("DOCK") {
-                    Toggle("Show Dock icon", isOn: $preferences.showsDockIcon)
-                    if let error = systemSettings.dockIconError {
-                        Text(error)
-                            .font(.system(size: 8))
-                            .foregroundStyle(.red)
-                    }
+            SettingsSectionCard("DOCK") {
+                SettingsToggleRow(
+                    icon: "dock.rectangle",
+                    title: "Dock Icon",
+                    subtitle: "Show Analytics Bar in the Dock",
+                    isOn: $preferences.showsDockIcon
+                )
+                if let error = systemSettings.dockIconError {
+                    SettingsErrorText(message: error)
                 }
+            }
 
-                settingsSection("ABOUT") {
-                    UpdateSettingsView(checker: updateChecker, installer: updateInstaller)
-                }
-
-                HStack {
-                    Spacer()
-                    Button("Quit") { NSApplication.shared.terminate(nil) }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                }
+            SettingsSectionCard("ABOUT") {
+                UpdateSettingsView(checker: updateChecker, installer: updateInstaller)
+            }
         }
-        .padding(14)
-    }
-
-    private func settingsSection<Content: View>(
-        _ title: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(title)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.orange)
-            VStack(alignment: .leading, spacing: 10, content: content)
-                .font(.system(size: 10, weight: .medium))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(11)
-                .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .stroke(.white.opacity(0.06), lineWidth: 1)
-                }
-        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 12)
+        .tint(.orange)
+        .accentColor(.orange)
     }
 }
 
-private extension MenuBarMetric {
+extension MenuBarMetric {
     var title: String {
         switch self {
         case .realtimeActiveUsers: "Live active users"
@@ -108,12 +98,12 @@ private extension MenuBarMetric {
     }
 }
 
-private extension BackgroundRefreshInterval {
-    var title: String {
+extension BackgroundRefreshInterval {
+    var shortTitle: String {
         switch self {
-        case .fiveMinutes: "Every 5 minutes"
-        case .fifteenMinutes: "Every 15 minutes"
-        case .thirtyMinutes: "Every 30 minutes"
+        case .fiveMinutes: "5m"
+        case .fifteenMinutes: "15m"
+        case .thirtyMinutes: "30m"
         }
     }
 }

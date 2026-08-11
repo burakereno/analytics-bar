@@ -15,6 +15,8 @@ APP_MACOS="$APP_CONTENTS/MacOS"
 APP_RESOURCES="$APP_CONTENTS/Resources"
 APP_BINARY="$APP_MACOS/$APP_NAME"
 INFO_PLIST="$APP_CONTENTS/Info.plist"
+APP_ICON_SOURCE="$ROOT_DIR/Sources/AnalyticsBar/Resources/AppIcon.icns"
+APP_ICON_DESTINATION="$APP_RESOURCES/AppIcon.icns"
 
 if [[ -f "$ROOT_DIR/.env.local" ]]; then
   set -a
@@ -35,6 +37,7 @@ cp "$BUILD_BINARY" "$APP_BINARY"
 chmod +x "$APP_BINARY"
 cp "$ROOT_DIR/scripts/install-update.sh" "$APP_RESOURCES/install-update.sh"
 chmod +x "$APP_RESOURCES/install-update.sh"
+cp "$APP_ICON_SOURCE" "$APP_ICON_DESTINATION"
 
 cat >"$INFO_PLIST" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,6 +48,8 @@ cat >"$INFO_PLIST" <<PLIST
   <string>$APP_NAME</string>
   <key>CFBundleIdentifier</key>
   <string>$BUNDLE_ID</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon</string>
   <key>CFBundleName</key>
   <string>$DISPLAY_NAME</string>
   <key>CFBundlePackageType</key>
@@ -67,6 +72,15 @@ open_app() {
   open_arguments=(-n)
   if [[ -n "${ANALYTICS_BAR_FIXTURE:-}" ]]; then
     open_arguments+=(--env "ANALYTICS_BAR_FIXTURE=$ANALYTICS_BAR_FIXTURE")
+  fi
+  if [[ -n "${ANALYTICS_BAR_SETTINGS_PREVIEW:-}" ]]; then
+    open_arguments+=(--env "ANALYTICS_BAR_SETTINGS_PREVIEW=$ANALYTICS_BAR_SETTINGS_PREVIEW")
+  fi
+  if [[ -n "${ANALYTICS_BAR_POPOVER_PREVIEW:-}" ]]; then
+    open_arguments+=(--env "ANALYTICS_BAR_POPOVER_PREVIEW=$ANALYTICS_BAR_POPOVER_PREVIEW")
+  fi
+  if [[ -n "${ANALYTICS_BAR_HOVER_PREVIEW_INDEX:-}" ]]; then
+    open_arguments+=(--env "ANALYTICS_BAR_HOVER_PREVIEW_INDEX=$ANALYTICS_BAR_HOVER_PREVIEW_INDEX")
   fi
   if [[ -n "${GOOGLE_OAUTH_CLIENT_ID:-}" ]]; then
     open_arguments+=(--env "GOOGLE_OAUTH_CLIENT_ID=$GOOGLE_OAUTH_CLIENT_ID")
