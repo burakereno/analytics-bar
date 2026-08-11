@@ -20,11 +20,6 @@
   <sub>macOS 14.0+ · Google Analytics read-only access · Developer ID signed and notarized</sub>
 </p>
 
-<p align="center">
-  <img src="docs/screenshot-main.png" alt="Analytics Bar multi-property dashboard" width="390">
-  <img src="docs/screenshot-settings.png" alt="Analytics Bar settings" width="390">
-</p>
-
 ## Features
 
 - **Multi-property dashboard** — monitor multiple GA4 properties at the same time
