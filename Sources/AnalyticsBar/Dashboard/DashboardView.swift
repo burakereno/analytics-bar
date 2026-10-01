@@ -12,7 +12,7 @@ struct DashboardView: View {
     @State private var headerHeight: CGFloat = 0
     @State private var dashboardContentHeight: CGFloat = 0
     @State private var settingsContentHeight: CGFloat = 0
-    @State private var settingsFooterHeight: CGFloat = 0
+    @State private var footerHeight: CGFloat = 0
     @State private var lastReportedHeight: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -88,25 +88,26 @@ struct DashboardView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
 
-            if showingSettings {
-                Divider().opacity(0.45)
-                SettingsFooterView(
-                    isRefreshing: model.isRefreshing,
-                    canRefresh: !model.isChoosingProperties
-                        && !model.isDisconnecting
-                        && !preferences.selectedPropertyResourceNames.isEmpty,
-                    refresh: { Task { await model.refresh(trigger: .manual) } }
-                )
-                .onGeometryChange(for: CGFloat.self) { proxy in
-                    proxy.size.height
-                } action: { height in
-                    settingsFooterHeight = height
-                    reportPreferredHeight()
-                }
+            Divider().opacity(0.45)
+
+            DashboardFooterView(
+                isRefreshing: model.isRefreshing,
+                canRefresh: !model.isChoosingProperties
+                    && !model.isDisconnecting
+                    && !preferences.selectedPropertyResourceNames.isEmpty,
+                refresh: { Task { await model.refresh(trigger: .manual) } },
+                updateChecker: updateChecker,
+                updateInstaller: updateInstaller
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                footerHeight = height
+                reportPreferredHeight()
             }
         }
         .frame(width: PopoverLayout.width)
-        .background(Color(nsColor: .windowBackgroundColor))
         .preferredColorScheme(.dark)
         .onChange(of: showingSettings) { _, _ in reportPreferredHeight() }
     }
@@ -116,14 +117,14 @@ struct DashboardView: View {
     }
 
     private func reportPreferredHeight() {
-        let bodyHeight = showingSettings
-            ? settingsContentHeight + settingsFooterHeight
+        let contentHeight = showingSettings
+            ? settingsContentHeight
             : dashboardContentHeight
-        guard headerHeight > 0, bodyHeight > 0 else { return }
+        guard headerHeight > 0, contentHeight > 0, footerHeight > 0 else { return }
         let preferredHeight = PopoverLayout.preferredHeight(
             header: headerHeight,
-            body: bodyHeight,
-            dividerCount: showingSettings ? 2 : 1
+            body: contentHeight + footerHeight,
+            dividerCount: 2
         )
         guard abs(lastReportedHeight - preferredHeight) > 0.5 else { return }
         lastReportedHeight = preferredHeight
@@ -210,11 +211,6 @@ struct DashboardView: View {
             TodayMetricsCard(snapshot: snapshot, showsRevenue: preferences.showsRevenue,
                              now: model.presentationDate, maximumAge: model.maximumDataAge)
             BreakdownCard(snapshots: snapshot.properties, now: model.presentationDate, maximumAge: model.maximumDataAge)
-            DashboardFooterView(
-                isRefreshing: model.isRefreshing,
-                refresh: { Task { await model.refresh(trigger: .manual) } },
-                updateChecker: updateChecker, updateInstaller: updateInstaller
-            )
         }
         .padding(12)
     }

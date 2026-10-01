@@ -166,43 +166,6 @@ struct SettingsErrorText: View {
     }
 }
 
-struct SettingsFooterView: View {
-    let isRefreshing: Bool
-    let canRefresh: Bool
-    let refresh: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Button(action: refresh) {
-                HStack(spacing: 6) {
-                    if isRefreshing {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Image(systemName: "arrow.clockwise.circle")
-                    }
-                    Text("Refresh data")
-                }
-            }
-            .disabled(isRefreshing || !canRefresh)
-            .help("Refresh reports for the selected sites")
-
-            Spacer()
-
-            Label("v\(AppConfiguration.marketingVersion)", systemImage: "arrow.down.circle")
-
-            Button("Quit") { NSApplication.shared.terminate(nil) }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .font(.system(size: 9, weight: .semibold))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-    }
-}
-
 private struct SettingsCardSurface: ViewModifier {
     func body(content: Content) -> some View {
         content

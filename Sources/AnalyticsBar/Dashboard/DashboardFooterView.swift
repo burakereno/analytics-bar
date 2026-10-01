@@ -3,6 +3,7 @@ import SwiftUI
 
 struct DashboardFooterView: View {
     let isRefreshing: Bool
+    let canRefresh: Bool
     let refresh: () -> Void
     @ObservedObject var updateChecker: UpdateChecker
     @ObservedObject var updateInstaller: UpdateInstaller
@@ -10,26 +11,42 @@ struct DashboardFooterView: View {
     var body: some View {
         HStack(spacing: 10) {
             Button(action: refresh) {
-                if isRefreshing {
-                    ProgressView().controlSize(.mini)
-                } else {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                HStack(spacing: 6) {
+                    if isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 14, height: 14)
+                    } else {
+                        Image(systemName: "arrow.clockwise.circle")
+                            .font(.system(size: 11, weight: .semibold))
+                            .frame(width: 14, height: 14)
+                    }
+
+                    Text(isRefreshing ? "Refreshing" : "Refresh")
                 }
             }
             .buttonStyle(.plain)
-            .disabled(isRefreshing)
+            .disabled(isRefreshing || !canRefresh)
+            .help("Refresh reports for the selected sites")
+            .accessibilityLabel("Refresh")
 
             Spacer()
 
             updateStatus
 
             Button("Quit") { NSApplication.shared.terminate(nil) }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.primary.opacity(0.06))
+                }
                 .buttonStyle(.plain)
         }
-        .font(.system(size: 9, weight: .semibold))
+        .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 2)
-        .padding(.vertical, 4)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder
