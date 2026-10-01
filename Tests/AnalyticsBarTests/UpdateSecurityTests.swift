@@ -5,6 +5,25 @@ import XCTest
 
 @MainActor
 final class UpdateSecurityTests: XCTestCase {
+    func testHelperRequirementParsesAndRejectsAnotherSignedExecutable() throws {
+        let requirement = try installerHelperRequirement()
+        let signedExecutable = "/usr/bin/true"
+        let baseline = try runCodesign(["--verify", "--strict", signedExecutable])
+        XCTAssertEqual(baseline.status, 0, baseline.output)
+
+        let verification = try runCodesign([
+            "--verify", "--strict", "--verbose=2", "-R=" + requirement, signedExecutable
+        ])
+
+        // A parsed requirement that does not match exits 3. A syntax error must
+        // not pass as successful rejection of an unrelated signed executable.
+        XCTAssertEqual(verification.status, 3, verification.output)
+        XCTAssertTrue(
+            verification.output.contains("code failed to satisfy specified code requirement(s)"),
+            verification.output
+        )
+    }
+
     func testRejectsUntrustedReleaseURLs() {
         let trusted = makeRelease()
         XCTAssertNoThrow(try UpdateTrustPolicy.validate(trusted))
@@ -105,6 +124,40 @@ final class UpdateSecurityTests: XCTestCase {
             }
         }
     }
+}
+
+private func installerHelperRequirement() throws -> String {
+    let repositoryURL = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let helperURL = repositoryURL.appendingPathComponent("scripts/install-update.sh")
+    let source = try String(contentsOf: helperURL, encoding: .utf8)
+    let pattern = #"(?m)^\s+-R="(.*)"\s+\\$"#
+    let expression = try NSRegularExpression(pattern: pattern)
+    let matches = expression.matches(in: source, range: NSRange(source.startIndex..., in: source))
+    XCTAssertEqual(matches.count, 1, "Expected one app-signature requirement in the real helper")
+    let match = try XCTUnwrap(matches.first)
+    let range = try XCTUnwrap(Range(match.range(at: 1), in: source))
+    let requirement = String(source[range])
+        .replacingOccurrences(of: "$BUNDLE_ID", with: AppConfiguration.bundleIdentifier)
+        .replacingOccurrences(of: "$TEAM_ID", with: AppConfiguration.teamIdentifier)
+        .replacingOccurrences(of: #"\""#, with: "\"")
+    XCTAssertFalse(requirement.contains("$"), "Unexpected unexpanded helper variable")
+    return requirement
+}
+
+private func runCodesign(_ arguments: [String]) throws -> (status: Int32, output: String) {
+    let process = Process()
+    let pipe = Pipe()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+    process.arguments = arguments
+    process.standardOutput = pipe
+    process.standardError = pipe
+    try process.run()
+    let output = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    return (process.terminationStatus, String(decoding: output, as: UTF8.self))
 }
 
 private enum InstallerFailure: CaseIterable {

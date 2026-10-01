@@ -83,21 +83,33 @@ ACTUAL_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString'
 APP_TEAM="$(/usr/bin/codesign -dv --verbose=4 "$SOURCE_APP" 2>&1 | /usr/bin/awk -F= '/^TeamIdentifier=/{print $2; exit}')"
 [[ "$APP_TEAM" == "$TEAM_ID" ]] || { echo "app publisher mismatch" >&2; exit 72; }
 /usr/bin/codesign --verify --deep --strict --verbose=2 \
-  -R="designated => anchor apple generic and identifier \"$BUNDLE_ID\" and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
+  -R="anchor apple generic and identifier \"$BUNDLE_ID\" and certificate leaf[subject.OU] = \"$TEAM_ID\"" \
   "$SOURCE_APP"
 /usr/sbin/spctl --assess --type execute --verbose=4 "$SOURCE_APP"
 
 /usr/bin/ditto "$SOURCE_APP" "$STAGED_APP"
 [[ -d "$TARGET_APP" ]] || { echo "installed app is missing" >&2; exit 73; }
 mv "$TARGET_APP" "$BACKUP_APP"
-mv "$STAGED_APP" "$TARGET_APP"
 REPLACED=1
+mv "$STAGED_APP" "$TARGET_APP"
 
+OLD_APP_PIDS="$(/usr/bin/pgrep -x "$EXECUTABLE_NAME" || true)"
 kill -TERM "$PARENT_PID" >/dev/null 2>&1 || true
 /usr/bin/open -n "$TARGET_APP"
 
 for _ in $(/usr/bin/seq 1 30); do
-  NEW_PID="$(/usr/bin/pgrep -x "$EXECUTABLE_NAME" | /usr/bin/awk -v old="$PARENT_PID" '$1 != old { print $1; exit }' || true)"
+  NEW_PID=""
+  while IFS= read -r CANDIDATE_PID; do
+    [[ -n "$CANDIDATE_PID" && "$CANDIDATE_PID" != "$PARENT_PID" ]] || continue
+    if printf '%s\n' "$OLD_APP_PIDS" | /usr/bin/grep -Fxq "$CANDIDATE_PID"; then
+      continue
+    fi
+    RUNNING_PATH="$(/bin/ps -p "$CANDIDATE_PID" -o comm= 2>/dev/null || true)"
+    if [[ "$RUNNING_PATH" == "$TARGET_APP/Contents/MacOS/$EXECUTABLE_NAME" ]]; then
+      NEW_PID="$CANDIDATE_PID"
+      break
+    fi
+  done < <(/usr/bin/pgrep -x "$EXECUTABLE_NAME" || true)
   if [[ -n "$NEW_PID" ]]; then
     CONFIRMED=1
     break
@@ -106,6 +118,6 @@ for _ in $(/usr/bin/seq 1 30); do
 done
 
 [[ "$CONFIRMED" -eq 1 ]] || { echo "updated app did not relaunch" >&2; exit 74; }
-rm -rf "$BACKUP_APP"
 REPLACED=0
+rm -rf "$BACKUP_APP"
 echo "Analytics Bar $EXPECTED_VERSION installed successfully"
