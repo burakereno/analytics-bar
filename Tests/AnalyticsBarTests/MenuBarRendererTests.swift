@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import AnalyticsBar
 
@@ -39,5 +40,47 @@ final class MenuBarRendererTests: XCTestCase {
         XCTAssertEqual(title.value, "6")
         XCTAssertTrue(title.warning)
         XCTAssertEqual(MenuBarRenderer.title(snapshot: snapshot, metric: .realtimeActiveUsers, now: now).value, "—")
+    }
+
+    @MainActor
+    func testMetricRemainsNativeTextWithMonospacedDigits() throws {
+        let title = MenuBarTitle(metric: .usersToday, value: "1.2K", accessibilityLabel: "1.2K users today")
+        let attributedTitle = MenuBarRenderer.attributedTitle(for: title)
+
+        XCTAssertEqual(attributedTitle.string, "1.2K")
+        let font = try XCTUnwrap(attributedTitle.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        XCTAssertEqual(font, NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold))
+        XCTAssertNil(attributedTitle.attribute(.foregroundColor, at: 0, effectiveRange: nil))
+    }
+
+    @MainActor
+    func testSymbolDoesNotRasterizeTheMetricIntoItsImage() throws {
+        let shortTitle = MenuBarTitle(metric: .usersToday, value: "1", accessibilityLabel: "Users today")
+        let longTitle = MenuBarTitle(metric: .usersToday, value: "123.4K", accessibilityLabel: "Users today")
+        let shortImage = try XCTUnwrap(MenuBarRenderer.image(for: shortTitle))
+        let longImage = try XCTUnwrap(MenuBarRenderer.image(for: longTitle))
+        let expected = try XCTUnwrap(NSImage(systemSymbolName: "chart.xyaxis.line", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)))
+
+        XCTAssertTrue(shortImage.isTemplate)
+        XCTAssertEqual(shortImage.size, expected.size)
+        XCTAssertEqual(longImage.size, shortImage.size)
+        XCTAssertEqual(longImage.tiffRepresentation, shortImage.tiffRepresentation)
+        XCTAssertEqual(shortImage.tiffRepresentation, expected.tiffRepresentation)
+        XCTAssertEqual(shortImage.accessibilityDescription, shortTitle.accessibilityLabel)
+    }
+
+    @MainActor
+    func testIconOnlyHasNoNativeMetricTitleAndKeepsWarningSymbol() throws {
+        let title = MenuBarRenderer.title(snapshot: nil, metric: .iconOnly, now: now)
+        let image = try XCTUnwrap(MenuBarRenderer.image(for: title))
+        let expected = try XCTUnwrap(NSImage(systemSymbolName: "exclamationmark.triangle", accessibilityDescription: nil)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)))
+
+        XCTAssertEqual(MenuBarRenderer.attributedTitle(for: title).length, 0)
+        XCTAssertTrue(image.isTemplate)
+        XCTAssertEqual(image.tiffRepresentation, expected.tiffRepresentation)
+        XCTAssertEqual(image.accessibilityDescription, title.accessibilityLabel)
+        XCTAssertTrue(title.accessibilityLabel.contains("Data needs attention"))
     }
 }

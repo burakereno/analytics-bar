@@ -63,39 +63,24 @@ enum MenuBarRenderer {
         return MenuBarTitle(metric: metric, value: value, accessibilityLabel: accessibility, warning: warning)
     }
 
-    static func contentWidth(for title: MenuBarTitle) -> CGFloat {
-        let iconWidth: CGFloat = 15
-        let padding: CGFloat = 8
-        guard let value = title.value else { return iconWidth + padding }
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)
-        ]
-        let textWidth = ceil((value as NSString).size(withAttributes: attributes).width)
-        return padding + iconWidth + 4 + textWidth
+    @MainActor
+    static func attributedTitle(for title: MenuBarTitle) -> NSAttributedString {
+        NSAttributedString(
+            string: title.value ?? "",
+            attributes: [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold)]
+        )
     }
 
     @MainActor
-    static func image(for title: MenuBarTitle) -> NSImage {
-        let width = contentWidth(for: title)
-        let height: CGFloat = 18
-        let image = NSImage(size: NSSize(width: width, height: height))
-        image.lockFocus()
-
-        let symbol = NSImage(systemSymbolName: title.warning ? "exclamationmark.triangle" : "chart.xyaxis.line", accessibilityDescription: title.accessibilityLabel)
-        symbol?.isTemplate = true
-        symbol?.draw(in: NSRect(x: 4, y: 2, width: 14, height: 14))
-
-        if let value = title.value {
-            let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
-                .foregroundColor: NSColor.labelColor
-            ]
-            (value as NSString).draw(at: NSPoint(x: 22, y: 2), withAttributes: attributes)
-        }
-
-        image.unlockFocus()
-        image.isTemplate = true
-        image.accessibilityDescription = title.accessibilityLabel
+    static func image(for title: MenuBarTitle) -> NSImage? {
+        let symbol = NSImage(
+            systemSymbolName: title.warning ? "exclamationmark.triangle" : "chart.xyaxis.line",
+            accessibilityDescription: title.accessibilityLabel
+        )
+        let configuration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
+        let image = symbol?.withSymbolConfiguration(configuration) ?? symbol
+        image?.isTemplate = true
+        image?.accessibilityDescription = title.accessibilityLabel
         return image
     }
 }

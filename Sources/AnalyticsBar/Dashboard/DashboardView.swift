@@ -44,6 +44,7 @@ struct DashboardView: View {
                 showingSettings: showingSettings,
                 toggleSettings: { withAnimation(transitionAnimation) { showingSettings.toggle() } }
             )
+            .fixedSize(horizontal: false, vertical: true)
             .onGeometryChange(for: CGFloat.self) { proxy in
                 proxy.size.height
             } action: { height in
@@ -64,6 +65,8 @@ struct DashboardView: View {
                             updateInstaller: updateInstaller,
                             close: { withAnimation(transitionAnimation) { showingSettings = false } }
                         )
+                        .frame(maxWidth: .infinity)
+                        .fixedSize(horizontal: false, vertical: true)
                         .onGeometryChange(for: CGFloat.self) { proxy in
                             proxy.size.height
                         } action: { height in
@@ -75,6 +78,8 @@ struct DashboardView: View {
                 } else {
                     ScrollView {
                         content
+                            .frame(maxWidth: .infinity)
+                            .fixedSize(horizontal: false, vertical: true)
                             .onGeometryChange(for: CGFloat.self) { proxy in
                                 proxy.size.height
                             } action: { height in
@@ -175,7 +180,8 @@ struct DashboardView: View {
     }
 
     private func loadedDashboard(_ snapshot: CombinedDashboardSnapshot) -> some View {
-        LazyVStack(spacing: 10) {
+        // Popover sizing needs the full content height, independent of its viewport.
+        VStack(spacing: 10) {
             LiveSummaryCard(snapshot: snapshot, now: model.presentationDate, maximumAge: model.maximumDataAge)
             WeeklySummaryCard(snapshot: snapshot, now: model.presentationDate, maximumAge: model.maximumDataAge)
 

@@ -10,6 +10,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let preferences: AppPreferences
     private var cancellables = Set<AnyCancellable>()
     private var preferredPopoverHeight = PopoverLayout.initialHeight
+    private var popoverResizeScheduled = false
 
     init(
         model: DashboardModel,
@@ -34,7 +35,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             width: PopoverLayout.width,
             height: PopoverLayout.initialHeight
         )
-        popover.contentViewController = NSHostingController(
+        let hostingController = NSHostingController(
             rootView: DashboardView(
                 model: model,
                 systemSettings: systemSettings,
@@ -47,6 +48,9 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             )
             .frame(width: PopoverLayout.width)
         )
+        // The controller sets the popover size explicitly; hosting must not also size it.
+        hostingController.sizingOptions = []
+        popover.contentViewController = hostingController
 
         guard let button = statusItem.button else { return }
         button.target = self
@@ -92,8 +96,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     private func updatePopoverHeight(_ preferredHeight: CGFloat) {
+        guard preferredHeight.isFinite, preferredHeight > 0 else { return }
         preferredPopoverHeight = preferredHeight
-        applyPreferredPopoverHeight(for: statusItem.button?.window?.screen)
+        guard !popoverResizeScheduled else { return }
+        popoverResizeScheduled = true
+        // Resizing during a SwiftUI geometry action re-enters layout synchronously.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.popoverResizeScheduled = false
+            self.applyPreferredPopoverHeight(for: self.statusItem.button?.window?.screen)
+        }
     }
 
     private func applyPreferredPopoverHeight(for screen: NSScreen?) {
@@ -117,9 +129,12 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     }
 
     private func updateStatusItem(title: MenuBarTitle) {
-        statusItem.length = MenuBarRenderer.contentWidth(for: title)
-        statusItem.button?.image = MenuBarRenderer.image(for: title)
-        statusItem.button?.imagePosition = .imageOnly
-        statusItem.button?.toolTip = title.accessibilityLabel
+        statusItem.length = NSStatusItem.variableLength
+        guard let button = statusItem.button else { return }
+        button.image = MenuBarRenderer.image(for: title)
+        button.attributedTitle = MenuBarRenderer.attributedTitle(for: title)
+        button.imagePosition = title.value == nil ? .imageOnly : .imageLeading
+        button.toolTip = title.accessibilityLabel
+        button.setAccessibilityLabel(title.accessibilityLabel)
     }
 }
