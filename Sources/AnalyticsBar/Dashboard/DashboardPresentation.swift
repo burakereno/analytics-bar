@@ -1,6 +1,45 @@
 import Foundation
 
 enum DashboardPresentation {
+    struct ReportSummary: Equatable {
+        let currentCount: Int
+        let totalCount: Int
+        let oldestSuccess: Date?
+
+        var isCurrent: Bool { totalCount > 0 && currentCount == totalCount }
+        var status: String {
+            if isCurrent { return "Up to date" }
+            if currentCount > 0 { return "\(currentCount)/\(totalCount) up to date" }
+            return "Unavailable"
+        }
+    }
+
+    static func reportSummary(_ statuses: [ReportStatus], now: Date, maximumAge: TimeInterval) -> ReportSummary {
+        let successes = statuses.compactMap(\.lastSuccess)
+        return ReportSummary(
+            currentCount: statuses.filter { $0.isCurrent(at: now, maximumAge: maximumAge) }.count,
+            totalCount: statuses.count,
+            oldestSuccess: successes.count == statuses.count ? successes.min() : nil
+        )
+    }
+
+    static func age(_ date: Date, relativeTo now: Date) -> String {
+        let seconds = max(0, Int(now.timeIntervalSince(date)))
+        if seconds < 60 { return "just now" }
+        if seconds < 3_600 { return "\(seconds / 60)m ago" }
+        if seconds < 86_400 { return "\(seconds / 3_600)h ago" }
+        return "\(seconds / 86_400)d ago"
+    }
+
+    static func timestamp(_ date: Date?) -> String {
+        date?.formatted(date: .abbreviated, time: .shortened) ?? "Never"
+    }
+
+    static func weeklyChange(current: Int, previous: Int) -> String {
+        if previous == 0 { return current == 0 ? "No change" : "New traffic" }
+        return delta(current: current, previous: previous)
+    }
+
     static func compactNumber(_ value: Int) -> String {
         compactDecimal(Decimal(value))
     }

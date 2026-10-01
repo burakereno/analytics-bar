@@ -25,18 +25,34 @@ struct AnalyticsMetricOrderRequest: Encodable, Sendable {
 }
 
 struct AnalyticsRunReportRequest: Encodable, Sendable {
+    struct HourFilter: Encodable, Sendable {
+        struct Filter: Encodable, Sendable {
+            struct InList: Encodable, Sendable { let values: [String] }
+            let fieldName = "hour"
+            let inListFilter: InList
+        }
+        let filter: Filter
+
+        init(completedHour: Int) {
+            // "24" matches no hour at midnight, before any hour has completed.
+            let values = completedHour < 0 ? ["24"] : (0...min(23, completedHour)).map { String(format: "%02d", $0) }
+            filter = Filter(inListFilter: Filter.InList(values: values))
+        }
+    }
     let dimensions: [AnalyticsNameRequest]?
     let metrics: [AnalyticsNameRequest]
     let dateRanges: [AnalyticsDateRangeRequest]
     let orderBys: [AnalyticsMetricOrderRequest]?
     let limit: String?
+    let dimensionFilter: HourFilter?
 
     init(
         dimensions: [String] = [],
         metrics: [String],
         dateRanges: [AnalyticsDateRangeRequest],
         orderByMetric: String? = nil,
-        limit: Int? = nil
+        limit: Int? = nil,
+        completedHour: Int? = nil
     ) {
         self.dimensions = dimensions.isEmpty ? nil : dimensions.map(AnalyticsNameRequest.init)
         self.metrics = metrics.map(AnalyticsNameRequest.init)
@@ -52,6 +68,7 @@ struct AnalyticsRunReportRequest: Encodable, Sendable {
             orderBys = nil
         }
         self.limit = limit.map(String.init)
+        dimensionFilter = completedHour.map(HourFilter.init)
     }
 }
 
@@ -90,11 +107,10 @@ enum AnalyticsDataRequestFactory {
         )
     }
 
-    static func coreBatch() -> AnalyticsBatchRunReportsRequest {
+    static func coreBatch(completedHour: Int) -> AnalyticsBatchRunReportsRequest {
         AnalyticsBatchRunReportsRequest(
             requests: [
                 AnalyticsRunReportRequest(
-                    dimensions: ["dateHour"],
                     metrics: coreMetrics,
                     dateRanges: [
                         AnalyticsDateRangeRequest(startDate: "today", endDate: "today"),
@@ -104,7 +120,7 @@ enum AnalyticsDataRequestFactory {
                 AnalyticsRunReportRequest(
                     dimensions: ["date"],
                     metrics: coreMetrics,
-                    dateRanges: [AnalyticsDateRangeRequest(startDate: "7daysAgo", endDate: "today")]
+                    dateRanges: [AnalyticsDateRangeRequest(startDate: "14daysAgo", endDate: "yesterday")]
                 ),
                 AnalyticsRunReportRequest(
                     dimensions: ["unifiedPagePathScreen"],
@@ -119,6 +135,14 @@ enum AnalyticsDataRequestFactory {
                     dateRanges: [AnalyticsDateRangeRequest(startDate: "today", endDate: "today")],
                     orderByMetric: "sessions",
                     limit: 5
+                ),
+                AnalyticsRunReportRequest(
+                    metrics: coreMetrics,
+                    dateRanges: [
+                        AnalyticsDateRangeRequest(startDate: "today", endDate: "today"),
+                        AnalyticsDateRangeRequest(startDate: "yesterday", endDate: "yesterday")
+                    ],
+                    completedHour: completedHour
                 )
             ]
         )

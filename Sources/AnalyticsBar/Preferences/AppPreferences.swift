@@ -2,6 +2,7 @@ import Combine
 import Foundation
 
 enum MenuBarMetric: String, Codable, CaseIterable, Sendable {
+    case sessionsLast7Days
     case realtimeActiveUsers
     case usersToday
     case sessionsToday
@@ -24,6 +25,7 @@ final class AppPreferences: ObservableObject {
         static let showsRevenue = "showsRevenue"
         static let opensAtLogin = "opensAtLogin"
         static let showsDockIcon = "showsDockIcon"
+        static let weeklyMenuMigration = "weeklyMenuMigration"
     }
 
     private let defaults: UserDefaults
@@ -54,9 +56,15 @@ final class AppPreferences: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        menuBarMetric = MenuBarMetric(
-            rawValue: defaults.string(forKey: Key.menuBarMetric) ?? ""
-        ) ?? .realtimeActiveUsers
+        let savedMetric = MenuBarMetric(rawValue: defaults.string(forKey: Key.menuBarMetric) ?? "")
+        if !defaults.bool(forKey: Key.weeklyMenuMigration) {
+            let migratedMetric: MenuBarMetric = savedMetric == .iconOnly ? .iconOnly : .sessionsLast7Days
+            menuBarMetric = migratedMetric
+            defaults.set(migratedMetric.rawValue, forKey: Key.menuBarMetric)
+            defaults.set(true, forKey: Key.weeklyMenuMigration)
+        } else {
+            menuBarMetric = savedMetric ?? .sessionsLast7Days
+        }
         backgroundRefreshInterval = BackgroundRefreshInterval(
             rawValue: defaults.integer(forKey: Key.backgroundRefreshInterval)
         ) ?? .fiveMinutes

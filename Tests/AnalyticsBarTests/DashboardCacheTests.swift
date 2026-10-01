@@ -35,4 +35,18 @@ final class DashboardCacheTests: XCTestCase {
         XCTAssertFalse(text.contains("refresh_token"))
         XCTAssertFalse(text.contains("client_secret"))
     }
+    func testLegacyCacheDecodesWithoutInventingWeeklyTotals() throws {
+        let encoded = try JSONEncoder().encode(TestAnalyticsFixtures.snapshot("101", activeUsers: 12))
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        for key in ["realtimeStatus", "coreStatus", "weeklySessions", "previousWeekSessions", "todayThroughSameHour"] {
+            object.removeValue(forKey: key)
+        }
+        let legacy = try JSONDecoder().decode(PropertyDashboardSnapshot.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertEqual(legacy.today.activeUsers, 12)
+        XCTAssertNil(legacy.weeklySessions)
+        XCTAssertNil(legacy.todayThroughSameHour)
+        let combined = DashboardAggregator.aggregate([legacy.markedStale(message: "Needs validation")])
+        XCTAssertFalse(combined.hasCurrentCore(at: legacy.fetchedAt, maximumAge: 390))
+    }
+
 }

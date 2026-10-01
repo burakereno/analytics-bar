@@ -31,12 +31,24 @@ struct AppEnvironment {
         let preferences = AppPreferences()
 #endif
         let scheduler = RefreshScheduler()
-        let systemSettings = SystemSettingsController(preferences: preferences)
+        let systemSettings: SystemSettingsController
+#if DEBUG
+        if fixtureSnapshots != nil {
+            let service = PreviewLaunchAtLoginService(status: environment["ANALYTICS_BAR_FIXTURE"] == "login-approval" ? .requiresApproval : .disabled)
+            systemSettings = SystemSettingsController(preferences: preferences,
+                launchAtLoginPreference: LaunchAtLoginPreference(service: service))
+        } else {
+            systemSettings = SystemSettingsController(preferences: preferences)
+        }
+#else
+        systemSettings = SystemSettingsController(preferences: preferences)
+#endif
         let updateInstaller = UpdateInstaller()
 
 #if DEBUG
         if let fixtureSnapshots {
-            let repository = FixtureAnalyticsRepository(snapshots: fixtureSnapshots)
+            let repository = FixtureAnalyticsRepository(snapshots: fixtureSnapshots,
+                hidesLastProperty: environment["ANALYTICS_BAR_FIXTURE"] == "missing-site")
             let updateChecker = UpdateChecker()
             return AppEnvironment(
                 model: DashboardModel(
@@ -122,16 +134,29 @@ private actor UnavailableAnalyticsRepository: AnalyticsRepositoryProtocol {
 }
 
 #if DEBUG
+@MainActor
+private final class PreviewLaunchAtLoginService: LaunchAtLoginServicing {
+    var status: LaunchAtLoginStatus
+    init(status: LaunchAtLoginStatus) { self.status = status }
+    func register() throws { status = .enabled }
+    func unregister() async throws { status = .disabled }
+}
+
 private actor FixtureAnalyticsRepository: AnalyticsRepositoryProtocol {
     let snapshots: [PropertyDashboardSnapshot]
+    let hidesLastProperty: Bool
 
-    init(snapshots: [PropertyDashboardSnapshot]) {
+    init(snapshots: [PropertyDashboardSnapshot], hidesLastProperty: Bool = false) {
         self.snapshots = snapshots
+        self.hidesLastProperty = hidesLastProperty
     }
 
     func hasStoredAuthorization() async -> Bool { true }
-    func connect() async throws -> [AnalyticsProperty] { snapshots.map(\.property) }
-    func availableProperties() async throws -> [AnalyticsProperty] { snapshots.map(\.property) }
+    func connect() async throws -> [AnalyticsProperty] { visibleProperties }
+    func availableProperties() async throws -> [AnalyticsProperty] { visibleProperties }
+    private var visibleProperties: [AnalyticsProperty] {
+        (hidesLastProperty ? Array(snapshots.dropLast()) : snapshots).map(\.property)
+    }
     func refreshSelectedProperties(
         _ properties: [AnalyticsProperty],
         trigger: RefreshTrigger,

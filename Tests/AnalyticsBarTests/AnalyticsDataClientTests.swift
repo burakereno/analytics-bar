@@ -36,76 +36,134 @@ final class AnalyticsDataClientTests: XCTestCase {
         XCTAssertEqual(totals, RealtimeTotals(activeUsers: 12, views: 30, eventCount: 40, keyEvents: 2.5))
     }
 
-    func testCoreBatchBuildsFourReportsAndUsesCompletedPropertyHour() async throws {
+    func testCoreUsesDistinctDailyUsersAndSeparateCompletedHourComparison() async throws {
         let http = TestHTTPClient { request in
             let url = try XCTUnwrap(request.url)
             XCTAssertEqual(url.absoluteString, "https://analyticsdata.googleapis.com/v1beta/properties/101:batchRunReports")
             let body = try XCTUnwrap(request.httpBody)
             let object = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             let requests = try XCTUnwrap(object["requests"] as? [[String: Any]])
-            XCTAssertEqual(requests.count, 4)
-            XCTAssertEqual(requests[2]["limit"] as? String, "5")
-            XCTAssertEqual(requests[3]["limit"] as? String, "5")
-            let pageOrderBys = try XCTUnwrap(requests[2]["orderBys"] as? [[String: Any]])
-            let pageMetric = try XCTUnwrap(pageOrderBys.first?["metric"] as? [String: Any])
-            XCTAssertEqual(pageMetric["metricName"] as? String, "screenPageViews")
-            XCTAssertNil(pageMetric["name"])
-            let sourceOrderBys = try XCTUnwrap(requests[3]["orderBys"] as? [[String: Any]])
-            let sourceMetric = try XCTUnwrap(sourceOrderBys.first?["metric"] as? [String: Any])
-            XCTAssertEqual(sourceMetric["metricName"] as? String, "sessions")
-            XCTAssertNil(sourceMetric["name"])
-
-            let json = """
-            {
-              "reports":[
-                {
-                  "dimensionHeaders":[{"name":"dateRange"},{"name":"dateHour"}],
-                  "metricHeaders":[
-                    {"name":"activeUsers","type":"TYPE_INTEGER"},
-                    {"name":"sessions","type":"TYPE_INTEGER"},
-                    {"name":"screenPageViews","type":"TYPE_INTEGER"},
-                    {"name":"eventCount","type":"TYPE_INTEGER"},
-                    {"name":"keyEvents","type":"TYPE_FLOAT"},
-                    {"name":"totalRevenue","type":"TYPE_CURRENCY"}
-                  ],
-                  "rows":[
-                    {"dimensionValues":[{"value":"date_range_0"},{"value":"2026081014"}],"metricValues":[{"value":"5"},{"value":"6"},{"value":"7"},{"value":"8"},{"value":"9"},{"value":"10"}]},
-                    {"dimensionValues":[{"value":"date_range_0"},{"value":"2026081015"}],"metricValues":[{"value":"50"},{"value":"60"},{"value":"70"},{"value":"80"},{"value":"90"},{"value":"100"}]},
-                    {"dimensionValues":[{"value":"date_range_1"},{"value":"2026080914"}],"metricValues":[{"value":"2"},{"value":"3"},{"value":"4"},{"value":"5"},{"value":"6"},{"value":"7"}]},
-                    {"dimensionValues":[{"value":"date_range_1"},{"value":"2026080915"}],"metricValues":[{"value":"20"},{"value":"30"},{"value":"40"},{"value":"50"},{"value":"60"},{"value":"70"}]}
-                  ]
-                },
-                {
-                  "dimensionHeaders":[{"name":"date"}],
-                  "metricHeaders":[{"name":"activeUsers","type":"TYPE_INTEGER"},{"name":"sessions","type":"TYPE_INTEGER"},{"name":"screenPageViews","type":"TYPE_INTEGER"},{"name":"eventCount","type":"TYPE_INTEGER"},{"name":"keyEvents","type":"TYPE_FLOAT"},{"name":"totalRevenue","type":"TYPE_CURRENCY"}],
-                  "rows":[{"dimensionValues":[{"value":"20260809"}],"metricValues":[{"value":"11"},{"value":"12"},{"value":"13"},{"value":"14"},{"value":"15"},{"value":"16"}]}]
-                },
-                {
-                  "dimensionHeaders":[{"name":"unifiedPagePathScreen"}],
-                  "metricHeaders":[{"name":"screenPageViews","type":"TYPE_INTEGER"}],
-                  "rows":[{"dimensionValues":[{"value":"/pricing"}],"metricValues":[{"value":"842"}]}]
-                },
-                {
-                  "dimensionHeaders":[{"name":"sessionPrimaryChannelGroup"}],
-                  "metricHeaders":[{"name":"sessions","type":"TYPE_INTEGER"}],
-                  "rows":[{"dimensionValues":[{"value":"Organic Search"}],"metricValues":[{"value":"713"}]}]
-                }
-              ]
+            XCTAssertEqual(requests.count, 5)
+            XCTAssertNil(requests[0]["dimensions"])
+            XCTAssertNil(requests[0]["dimensionFilter"])
+            XCTAssertNil(requests[4]["dimensions"])
+            let expression = try XCTUnwrap(requests[4]["dimensionFilter"] as? [String: Any])
+            let filter = try XCTUnwrap(expression["filter"] as? [String: Any])
+            let list = try XCTUnwrap(filter["inListFilter"] as? [String: Any])
+            XCTAssertEqual(filter["fieldName"] as? String, "hour")
+            XCTAssertEqual(list["values"] as? [String], (0...14).map { String(format: "%02d", $0) })
+            let ranges = try XCTUnwrap(requests[1]["dateRanges"] as? [[String: String]])
+            XCTAssertEqual(ranges, [["startDate": "14daysAgo", "endDate": "yesterday"]])
+            for (index, metricName) in [(2, "screenPageViews"), (3, "sessions")] {
+                XCTAssertEqual(requests[index]["limit"] as? String, "5")
+                let order = try XCTUnwrap(requests[index]["orderBys"] as? [[String: Any]])
+                let metric = try XCTUnwrap(order.first?["metric"] as? [String: Any])
+                XCTAssertEqual(metric["metricName"] as? String, metricName)
             }
-            """
-            return (Data(json.utf8), TestHTTPClient.response(url: url, status: 200))
+            return (try Self.coreResponse(), TestHTTPClient.response(url: url, status: 200))
         }
         let client = AnalyticsDataClient(httpClient: http, retryPolicy: .immediate)
         let now = ISO8601DateFormatter().date(from: "2026-08-10T12:30:00Z")!
-
         let report = try await client.fetchCore(property: property, now: now, accessToken: "access")
 
-        XCTAssertEqual(report.today.activeUsers, 5)
-        XCTAssertEqual(report.today.sessions, 6)
+        XCTAssertEqual(report.today.activeUsers, 9, "Use Google's daily distinct count, including the current hour")
+        XCTAssertEqual(report.todayThroughSameHour?.activeUsers, 5)
         XCTAssertEqual(report.yesterdayThroughSameHour.activeUsers, 2)
+        XCTAssertEqual(report.sevenDay.count, 7, "Include zero-traffic days")
         XCTAssertEqual(report.sevenDay[try AnalyticsDay(gaValue: "20260809")]?.sessions, 12)
+        XCTAssertNil(report.sevenDay[try AnalyticsDay(gaValue: "20260802")])
+        XCTAssertEqual(report.weeklySessions, 12)
+        XCTAssertEqual(report.previousWeekSessions, 8)
         XCTAssertEqual(report.topPages, [RankedDimensionRow(label: "/pricing", value: 842)])
         XCTAssertEqual(report.topSources, [RankedDimensionRow(label: "Organic Search", value: 713)])
+    }
+
+    func testMidnightRetainsTodayButHasNoCompletedHourComparison() async throws {
+        let http = TestHTTPClient { request in
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: request.httpBody!) as? [String: Any])
+            let requests = try XCTUnwrap(object["requests"] as? [[String: Any]])
+            let filter = try XCTUnwrap(requests[4]["dimensionFilter"] as? [String: Any])
+            let inner = try XCTUnwrap(filter["filter"] as? [String: Any])
+            let list = try XCTUnwrap(inner["inListFilter"] as? [String: Any])
+            XCTAssertEqual(list["values"] as? [String], ["24"])
+            return (try Self.coreResponse(), TestHTTPClient.response(url: request.url!, status: 200))
+        }
+        let now = ISO8601DateFormatter().date(from: "2026-08-10T21:30:00Z")!
+        let report = try await AnalyticsDataClient(httpClient: http).fetchCore(property: property, now: now, accessToken: "access")
+        XCTAssertEqual(report.today.activeUsers, 9)
+        XCTAssertEqual(report.todayThroughSameHour, .zero)
+        XCTAssertEqual(report.yesterdayThroughSameHour, .zero)
+    }
+
+    func testSuccessfulEmptyRealtimeIsZeroButMissingHeadersIsInvalid() async throws {
+        let valid = TestHTTPClient { request in
+            let data = try JSONSerialization.data(withJSONObject: ["metricHeaders":
+                ["activeUsers", "screenPageViews", "eventCount", "keyEvents"].map { ["name": $0] }])
+            return (data, TestHTTPClient.response(url: request.url!, status: 200))
+        }
+        let zero = try await AnalyticsDataClient(httpClient: valid).fetchRealtime(property: property, accessToken: "access")
+        XCTAssertEqual(zero, .zero)
+        let invalid = TestHTTPClient { request in
+            (Data("{}".utf8), TestHTTPClient.response(url: request.url!, status: 200))
+        }
+        do {
+            _ = try await AnalyticsDataClient(httpClient: invalid).fetchRealtime(property: property, accessToken: "access")
+            XCTFail("Malformed responses must not masquerade as zero traffic")
+        } catch { XCTAssertEqual(error as? GoogleAPIError, .invalidResponse) }
+    }
+
+    func testGoogleMetadataOnlyRealtimeResponseMeansNoActivity() async throws {
+        // Observed from the live API: successful empty reports contain only kind and quota.
+        for explicitEmptyRows in [false, true] {
+            let http = TestHTTPClient { request in
+                var payload: [String: Any] = [
+                    "kind": "analyticsData#runRealtimeReport",
+                    "propertyQuota": ["tokensPerHour": ["consumed": 1, "remaining": 39999]]
+                ]
+                if explicitEmptyRows { payload["rows"] = []; payload["rowCount"] = 0 }
+                return (try JSONSerialization.data(withJSONObject: payload), TestHTTPClient.response(url: request.url!, status: 200))
+            }
+            let totals = try await AnalyticsDataClient(httpClient: http).fetchRealtime(property: property, accessToken: "access")
+            XCTAssertEqual(totals, .zero)
+        }
+    }
+
+    func testSparseRealtimeValidationRejectsWrongKindAndIncompletePopulatedReports() async throws {
+        let payloads = [
+            "{\"kind\":\"analyticsData#runReport\"}",
+            "{\"kind\":\"analyticsData#runRealtimeReport\",\"rowCount\":1}",
+            "{\"kind\":\"analyticsData#runRealtimeReport\",\"rows\":[{\"metricValues\":[{\"value\":\"1\"}]}]}",
+            "{\"kind\":\"analyticsData#runRealtimeReport\",\"metricHeaders\":[{\"name\":\"activeUsers\"}]}",
+            "{\"kind\":\"analyticsData#runRealtimeReport\",\"rows\":[{},{}]}"
+        ]
+        for payload in payloads {
+            let http = TestHTTPClient { request in
+                (Data(payload.utf8), TestHTTPClient.response(url: request.url!, status: 200))
+            }
+            do {
+                _ = try await AnalyticsDataClient(httpClient: http).fetchRealtime(property: property, accessToken: "access")
+                XCTFail("Incomplete or unrelated responses must not be accepted as zero traffic")
+            } catch { XCTAssertEqual(error as? GoogleAPIError, .invalidResponse) }
+        }
+    }
+
+    private static func coreResponse() throws -> Data {
+        func report(_ dimensions: [String], _ metrics: [String], _ rows: [([String], [Int])]) -> [String: Any] {
+            ["dimensionHeaders": dimensions.map { ["name": $0] },
+             "metricHeaders": metrics.map { ["name": $0] },
+             "rows": rows.map { row in
+                 ["dimensionValues": row.0.map { ["value": $0] },
+                  "metricValues": row.1.map { ["value": String($0)] }]
+             }]
+        }
+        let metrics = AnalyticsDataRequestFactory.coreMetrics
+        return try JSONSerialization.data(withJSONObject: ["reports": [
+            report(["dateRange"], metrics, [(["date_range_0"], [9, 10, 11, 12, 1, 0])]),
+            report(["date"], metrics, [(["20260809"], [11, 12, 13, 14, 1, 0]), (["20260802"], [7, 8, 9, 10, 0, 0])]),
+            report(["unifiedPagePathScreen"], ["screenPageViews"], [(["/pricing"], [842])]),
+            report(["sessionPrimaryChannelGroup"], ["sessions"], [(["Organic Search"], [713])]),
+            report(["dateRange"], metrics, [(["date_range_0"], [5, 6, 7, 8, 1, 0]), (["date_range_1"], [2, 3, 4, 5, 0, 0])])
+        ]])
     }
 
     func testRetriesRateLimitThenSucceeds() async throws {

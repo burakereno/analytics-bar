@@ -14,7 +14,8 @@ struct PropertySettingsView: View {
         _selection = State(
             initialValue: PropertySelection(
                 properties: model.availableProperties,
-                selectedResourceNames: model.preferences.selectedPropertyResourceNames
+                selectedResourceNames: model.preferences.selectedPropertyResourceNames,
+                preservesUnavailableSelections: true
             )
         )
     }
@@ -28,11 +29,13 @@ struct PropertySettingsView: View {
     }
 
     var body: some View {
-        if model.availableProperties.isEmpty {
+        if model.availableProperties.isEmpty && model.unavailableSelectedResourceNames.isEmpty {
             SettingsRowLabel(
                 icon: "chart.bar.xaxis",
-                title: "No Properties",
-                subtitle: "No GA4 properties are available for this connection"
+                title: model.connectionError == nil ? "No Properties" : "Properties unavailable",
+                subtitle: model.connectionError == nil
+                    ? "No GA4 properties are available for this connection"
+                    : "Restore the Google connection to load your properties"
             )
             .padding(.vertical, 3)
         } else {
@@ -95,6 +98,27 @@ struct PropertySettingsView: View {
                         }
                     }
                     .clipped()
+                }
+
+                ForEach(model.unavailableSelectedResourceNames, id: \.self) { name in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 9) {
+                            Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                            Text(model.propertyDisplayName(name)).font(.system(size: 10.5, weight: .semibold))
+                            Spacer()
+                            Button("Remove") {
+                                selection.removeUnavailable(name)
+                                model.updateSelection(selection.selectedResourceNames)
+                            }
+                            .buttonStyle(.plain).foregroundStyle(.orange)
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .disabled(model.isDisconnecting)
+                            .accessibilityLabel("Remove unavailable \(model.propertyDisplayName(name))")
+                        }
+                        Text("Unavailable · \(name)")
+                            .font(.system(size: 8.5)).foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 6)
                 }
 
                 SettingsRowDivider()
@@ -165,7 +189,7 @@ struct PropertySettingsView: View {
                     Text(property.displayName)
                         .font(.system(size: 10.5, weight: .semibold))
                         .lineLimit(1)
-                    Text(property.currencyCode)
+                    Text("\(property.currencyCode) · \(property.timeZoneIdentifier)")
                         .font(.system(size: 8.5, weight: .medium))
                         .foregroundStyle(.tertiary)
                 }
@@ -182,7 +206,7 @@ struct PropertySettingsView: View {
                             ? "At least one property must remain selected"
                             : "Changes save automatically"
                     )
-                    .disabled(isOnlySelectedProperty(property.resourceName))
+                    .disabled(isOnlySelectedProperty(property.resourceName) || model.isDisconnecting)
             }
             .frame(minHeight: Self.propertyRowHeight)
             .padding(.leading, 30)
@@ -212,7 +236,7 @@ struct PropertySettingsView: View {
             .buttonStyle(.plain)
             .font(.system(size: 8.5, weight: .bold))
             .foregroundStyle(.orange)
-            .disabled(allSelected && !canClear)
+            .disabled((allSelected && !canClear) || model.isDisconnecting)
             .accessibilityLabel(allSelected ? "Deselect account properties" : "Select all account properties")
         }
         .padding(.leading, 62)
@@ -236,7 +260,8 @@ struct PropertySettingsView: View {
     private func synchronizeSelection() {
         selection = PropertySelection(
             properties: model.availableProperties,
-            selectedResourceNames: model.preferences.selectedPropertyResourceNames
+            selectedResourceNames: model.preferences.selectedPropertyResourceNames,
+            preservesUnavailableSelections: true
         )
     }
 }

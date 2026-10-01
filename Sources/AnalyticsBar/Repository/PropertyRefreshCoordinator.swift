@@ -1,8 +1,16 @@
 import Foundation
 
-enum PropertyRefreshFailure: Equatable, Sendable {
+enum PropertyRefreshFailure: Error, Equatable, Sendable {
     case authorizationExpired
     case requestFailed(String)
+
+    init(error: Error) {
+        if error as? GoogleAPIError == .authorizationExpired || error as? GoogleOAuthError == .authorizationExpired {
+            self = .authorizationExpired
+        } else {
+            self = .requestFailed(error.localizedDescription)
+        }
+    }
 
     var message: String {
         switch self {
@@ -14,22 +22,28 @@ enum PropertyRefreshFailure: Equatable, Sendable {
     }
 }
 
-enum PropertyRefreshOutcome: Sendable {
-    case success(PropertyDashboardSnapshot)
-    case failure(AnalyticsProperty, PropertyRefreshFailure)
-
-    var property: AnalyticsProperty {
-        switch self {
-        case let .success(snapshot):
-            return snapshot.property
-        case let .failure(property, _):
-            return property
-        }
-    }
+struct PropertyRefreshOutcome: Sendable {
+    let property: AnalyticsProperty
+    let realtime: Result<RealtimeTotals, PropertyRefreshFailure>
+    let core: Result<PropertyCoreReport, PropertyRefreshFailure>
 
     var isAuthorizationExpired: Bool {
-        if case .failure(_, .authorizationExpired) = self { return true }
-        return false
+        failures.contains { $0 == .authorizationExpired }
+    }
+
+    var failures: [PropertyRefreshFailure] {
+        var result: [PropertyRefreshFailure] = []
+        if case let .failure(error) = realtime { result.append(error) }
+        if case let .failure(error) = core { result.append(error) }
+        return result
+    }
+
+    func preservingSuccesses(from previous: Self) -> Self {
+        let live: Result<RealtimeTotals, PropertyRefreshFailure>
+        let report: Result<PropertyCoreReport, PropertyRefreshFailure>
+        if case .success = previous.realtime { live = previous.realtime } else { live = realtime }
+        if case .success = previous.core { report = previous.core } else { report = core }
+        return Self(property: property, realtime: live, core: report)
     }
 }
 
@@ -93,30 +107,18 @@ struct PropertyRefreshCoordinator: Sendable {
         accessToken: String,
         now: Date
     ) async -> PropertyRefreshOutcome {
-        do {
-            async let realtime = dataClient.fetchRealtime(property: property, accessToken: accessToken)
-            async let core = dataClient.fetchCore(property: property, now: now, accessToken: accessToken)
-            let (live, report) = try await (realtime, core)
-            return .success(
-                PropertyDashboardSnapshot(
-                    property: property,
-                    live: live,
-                    today: report.today,
-                    yesterdayThroughSameHour: report.yesterdayThroughSameHour,
-                    sevenDay: report.sevenDay,
-                    topPages: report.topPages,
-                    topSources: report.topSources,
-                    fetchedAt: now,
-                    freshness: .live,
-                    refreshMessage: nil
-                )
-            )
-        } catch GoogleAPIError.authorizationExpired {
-            return .failure(property, .authorizationExpired)
-        } catch GoogleOAuthError.authorizationExpired {
-            return .failure(property, .authorizationExpired)
-        } catch {
-            return .failure(property, .requestFailed(error.localizedDescription))
-        }
+        async let realtime = fetchRealtime(property: property, accessToken: accessToken)
+        async let core = fetchCore(property: property, accessToken: accessToken, now: now)
+        return await PropertyRefreshOutcome(property: property, realtime: realtime, core: core)
+    }
+
+    private func fetchRealtime(property: AnalyticsProperty, accessToken: String) async -> Result<RealtimeTotals, PropertyRefreshFailure> {
+        do { return .success(try await dataClient.fetchRealtime(property: property, accessToken: accessToken)) }
+        catch { return .failure(PropertyRefreshFailure(error: error)) }
+    }
+
+    private func fetchCore(property: AnalyticsProperty, accessToken: String, now: Date) async -> Result<PropertyCoreReport, PropertyRefreshFailure> {
+        do { return .success(try await dataClient.fetchCore(property: property, now: now, accessToken: accessToken)) }
+        catch { return .failure(PropertyRefreshFailure(error: error)) }
     }
 }

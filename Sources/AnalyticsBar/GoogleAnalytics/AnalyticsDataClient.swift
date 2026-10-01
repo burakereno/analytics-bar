@@ -50,7 +50,19 @@ struct AnalyticsDataClient: AnalyticsDataClientProtocol, Sendable {
             accessToken: accessToken
         )
         let response: AnalyticsReportResponse = try decode(data)
+        let rows = response.rows ?? []
+        let realtimeKind = "analyticsData#runRealtimeReport"
+        guard response.kind == nil || response.kind == realtimeKind,
+              rows.count <= 1, (response.rowCount ?? rows.count) == rows.count else {
+            throw GoogleAPIError.invalidResponse
+        }
+        // Google omits both rows and headers when realtime activity is absent.
+        // Require the realtime resource kind before accepting this sparse response as zero.
+        if rows.isEmpty, response.kind == realtimeKind, (response.metricHeaders ?? []).isEmpty {
+            return .zero
+        }
         let table = try AnalyticsReportTable(response: response)
+        try table.requireHeaders(metrics: ["activeUsers", "screenPageViews", "eventCount", "keyEvents"])
         guard let row = table.rows.first else { return .zero }
         return RealtimeTotals(
             activeUsers: try table.integer("activeUsers", in: row),
@@ -66,43 +78,50 @@ struct AnalyticsDataClient: AnalyticsDataClientProtocol, Sendable {
         accessToken: String
     ) async throws -> PropertyCoreReport {
         let url = try endpoint(property: property, method: "batchRunReports")
+        let cutoffHour = completedHour(now: now, timeZoneIdentifier: property.timeZoneIdentifier)
         let data = try await post(
             url: url,
-            body: AnalyticsDataRequestFactory.coreBatch(),
+            body: AnalyticsDataRequestFactory.coreBatch(completedHour: cutoffHour),
             accessToken: accessToken
         )
         let response: AnalyticsBatchReportResponse = try decode(data)
-        guard response.reports.count == 4 else { throw GoogleAPIError.invalidResponse }
+        guard response.reports.count == 5 else { throw GoogleAPIError.invalidResponse }
 
-        let hourly = try AnalyticsReportTable(response: response.reports[0])
+        let daily = try AnalyticsReportTable(response: response.reports[0])
         let trend = try AnalyticsReportTable(response: response.reports[1])
         let pages = try AnalyticsReportTable(response: response.reports[2])
         let sources = try AnalyticsReportTable(response: response.reports[3])
-        let cutoffHour = completedHour(now: now, timeZoneIdentifier: property.timeZoneIdentifier)
+        let comparison = try AnalyticsReportTable(response: response.reports[4])
+        try daily.requireHeaders(metrics: AnalyticsDataRequestFactory.coreMetrics, dimensions: ["dateRange"])
+        try comparison.requireHeaders(metrics: AnalyticsDataRequestFactory.coreMetrics, dimensions: ["dateRange"])
+        try trend.requireHeaders(metrics: AnalyticsDataRequestFactory.coreMetrics, dimensions: ["date"])
+        try pages.requireHeaders(metrics: ["screenPageViews"], dimensions: ["unifiedPagePathScreen"])
+        try sources.requireHeaders(metrics: ["sessions"], dimensions: ["sessionPrimaryChannelGroup"])
 
-        var today = MetricTotals.zero
-        var yesterday = MetricTotals.zero
-        if cutoffHour >= 0 {
-            for row in hourly.rows {
-                let dateHour = try hourly.dimension("dateHour", in: row)
-                guard dateHour.count == 10,
-                      let hour = Int(dateHour.suffix(2)),
-                      hour <= cutoffHour else { continue }
-                switch try hourly.dimension("dateRange", in: row) {
-                case "date_range_0":
-                    today = today + (try hourly.metricTotals(in: row))
-                case "date_range_1":
-                    yesterday = yesterday + (try hourly.metricTotals(in: row))
-                default:
-                    throw GoogleAPIError.invalidResponse
-                }
-            }
-        }
+        let today = try totals(in: daily, dateRange: "date_range_0")
+        let todayCompared = cutoffHour < 0 ? .zero : try totals(in: comparison, dateRange: "date_range_0")
+        let yesterday = cutoffHour < 0 ? .zero : try totals(in: comparison, dateRange: "date_range_1")
 
-        var sevenDay: [AnalyticsDay: MetricTotals] = [:]
+        var reportedDays: [AnalyticsDay: MetricTotals] = [:]
         for row in trend.rows {
             let day = try AnalyticsDay(gaValue: trend.dimension("date", in: row))
-            sevenDay[day] = (sevenDay[day] ?? .zero) + (try trend.metricTotals(in: row))
+            guard reportedDays[day] == nil else { throw GoogleAPIError.invalidResponse }
+            reportedDays[day] = try trend.metricTotals(in: row)
+        }
+
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: property.timeZoneIdentifier) ?? .gmt
+        var sevenDay: [AnalyticsDay: MetricTotals] = [:]
+        var previousWeekSessions = 0
+        for offset in 1...14 {
+            guard let date = calendar.date(byAdding: .day, value: -offset, to: now) else {
+                throw GoogleAPIError.invalidResponse
+            }
+            let parts = calendar.dateComponents([.year, .month, .day], from: date)
+            let day = AnalyticsDay(year: parts.year!, month: parts.month!, day: parts.day!)
+            let value = reportedDays[day] ?? .zero
+            if offset <= 7 { sevenDay[day] = value }
+            else { previousWeekSessions += value.sessions }
         }
 
         return PropertyCoreReport(
@@ -118,8 +137,25 @@ struct AnalyticsDataClient: AnalyticsDataClientProtocol, Sendable {
                 table: sources,
                 dimension: "sessionPrimaryChannelGroup",
                 metric: "sessions"
-            )
+            ),
+            todayThroughSameHour: todayCompared,
+            weeklySessions: sevenDay.values.reduce(0) { $0 + $1.sessions },
+            previousWeekSessions: previousWeekSessions
         )
+    }
+
+    private func totals(in table: AnalyticsReportTable, dateRange: String) throws -> MetricTotals {
+        // The API aggregates users over the entire filtered period; never sum hourly distinct users.
+        var result: MetricTotals?
+        for row in table.rows {
+            let range = try table.dimension("dateRange", in: row)
+            guard ["date_range_0", "date_range_1"].contains(range) else { throw GoogleAPIError.invalidResponse }
+            if range == dateRange {
+                guard result == nil else { throw GoogleAPIError.invalidResponse }
+                result = try table.metricTotals(in: row)
+            }
+        }
+        return result ?? .zero
     }
 
     private func rankedRows(

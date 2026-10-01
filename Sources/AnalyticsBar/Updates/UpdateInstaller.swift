@@ -111,6 +111,13 @@ final class UpdateInstaller: ObservableObject {
 
     @Published private(set) var state: State = .idle
 
+    var isBusy: Bool {
+        switch state {
+        case .idle, .failed: false
+        default: true
+        }
+    }
+
     private let downloader: any UpdateDownloading
     private let helperRunner: any UpdateHelperRunning
     private let helperURL: URL?

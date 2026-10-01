@@ -8,11 +8,15 @@ struct BreakdownCard: View {
     }
 
     let snapshots: [PropertyDashboardSnapshot]
+    let now: Date
+    let maximumAge: TimeInterval
     @State private var propertyID: String
     @State private var breakdown: Breakdown = .pages
 
-    init(snapshots: [PropertyDashboardSnapshot]) {
+    init(snapshots: [PropertyDashboardSnapshot], now: Date, maximumAge: TimeInterval) {
         self.snapshots = snapshots
+        self.now = now
+        self.maximumAge = maximumAge
         _propertyID = State(initialValue: snapshots.first?.id ?? "")
     }
 
@@ -47,7 +51,11 @@ struct BreakdownCard: View {
                 }
             }
 
-            if rows.isEmpty {
+            if selected?.coreHealth.isCurrent(at: now, maximumAge: maximumAge) != true {
+                Text("Ranking data is unavailable. Check report details in Settings.")
+                    .font(.system(size: 11)).foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+            } else if rows.isEmpty {
                 Text("No ranking data today")
                     .font(.system(size: 10))
                     .foregroundStyle(.secondary)

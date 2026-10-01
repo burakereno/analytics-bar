@@ -42,8 +42,12 @@ struct DashboardFooterView: View {
             case .checking:
                 ProgressView().controlSize(.mini)
             case .upToDate:
-                Text("v\(AppConfiguration.marketingVersion) · Up to date")
+                Button("v\(AppConfiguration.marketingVersion) · Up to date") {
+                    Task { await updateChecker.checkManually() }
+                }
+                    .buttonStyle(.plain)
                     .foregroundStyle(.tertiary)
+                    .help("Check for Updates")
             case let .available(release):
                 Button("Update v\(release.version)") {
                     Task { try? await updateInstaller.install(release) }

@@ -7,7 +7,7 @@ enum DashboardAggregator {
         let live = snapshots.reduce(.zero) { $0 + $1.live }
         let today = snapshots.reduce(.zero) { $0 + $1.today }
         let yesterday = snapshots.reduce(.zero) { $0 + $1.yesterdayThroughSameHour }
-        let fetchedAt = snapshots.map(\.fetchedAt).max() ?? .distantPast
+        let fetchedAt = snapshots.map(\.fetchedAt).min() ?? .distantPast
 
         var sevenDay: [AnalyticsDay: MetricTotals] = [:]
         for snapshot in snapshots {
@@ -30,7 +30,7 @@ enum DashboardAggregator {
 
     private static func revenueSummary(for snapshots: [PropertyDashboardSnapshot]) -> RevenueSummary {
         var amounts: [String: Decimal] = [:]
-        for snapshot in snapshots where snapshot.today.revenue != 0 {
+        for snapshot in snapshots where !snapshot.property.currencyCode.isEmpty {
             amounts[snapshot.property.currencyCode, default: 0] += snapshot.today.revenue
         }
 

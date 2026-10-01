@@ -54,9 +54,11 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         button.sendAction(on: [.leftMouseUp])
 
         model.$snapshot
-            .combineLatest(preferences.$menuBarMetric)
-            .map { snapshot, metric in
-                MenuBarRenderer.title(snapshot: snapshot, metric: metric)
+            .combineLatest(preferences.$menuBarMetric, model.$presentationDate, model.$connectionError)
+            .map { snapshot, metric, date, error in
+                MenuBarRenderer.title(snapshot: snapshot, metric: metric, now: date,
+                                      maximumAge: TimeInterval(preferences.backgroundRefreshInterval.rawValue) + 90,
+                                      connectionError: error)
             }
             .removeDuplicates()
             .sink { [weak self] title in

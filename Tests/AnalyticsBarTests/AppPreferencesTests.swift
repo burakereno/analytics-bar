@@ -21,7 +21,7 @@ final class AppPreferencesTests: XCTestCase {
     func testDefaultsAndSelectedPropertyRoundTrip() {
         let preferences = AppPreferences(defaults: defaults)
 
-        XCTAssertEqual(preferences.menuBarMetric, .realtimeActiveUsers)
+        XCTAssertEqual(preferences.menuBarMetric, .sessionsLast7Days)
         XCTAssertEqual(preferences.backgroundRefreshInterval, .fiveMinutes)
         XCTAssertEqual(preferences.selectedPropertyResourceNames, [])
         XCTAssertTrue(preferences.showsRevenue)
@@ -33,4 +33,12 @@ final class AppPreferencesTests: XCTestCase {
         XCTAssertEqual(reloaded.selectedPropertyResourceNames, ["properties/101", "properties/202"])
         XCTAssertEqual(reloaded.menuBarMetric, .sessionsToday)
     }
+    func testMigratesExistingMetricOnceAndKeepsSubsequentChoices() {
+        defaults.set("usersToday", forKey: "menuBarMetric")
+        let preferences = AppPreferences(defaults: defaults)
+        XCTAssertEqual(preferences.menuBarMetric, .sessionsLast7Days)
+        preferences.menuBarMetric = .viewsToday
+        XCTAssertEqual(AppPreferences(defaults: defaults).menuBarMetric, .viewsToday)
+    }
+
 }

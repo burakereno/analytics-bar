@@ -2,50 +2,43 @@ import SwiftUI
 
 struct PropertySummaryCard: View {
     let snapshot: PropertyDashboardSnapshot
+    let now: Date
+    let maximumAge: TimeInterval
+
+    private var current: Bool { snapshot.coreHealth.isCurrent(at: now, maximumAge: maximumAge) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 7) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(snapshot.property.displayName)
-                        .font(.system(size: 12, weight: .bold))
-                        .lineLimit(1)
-                    Text(snapshot.property.accountDisplayName)
-                        .font(.system(size: 9))
-                        .foregroundStyle(.secondary)
-                }
+                Text(snapshot.property.displayName)
+                    .font(.system(size: 12, weight: .semibold)).lineLimit(1)
                 Spacer()
-                if snapshot.freshness == .stale {
-                    Label("Stale", systemImage: "clock.arrow.circlepath")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.orange)
-                } else {
-                    Text("\(snapshot.live.activeUsers) live")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.green)
+                if !current {
+                    Label("Unavailable", systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 10)).foregroundStyle(.orange)
                 }
             }
-
-            HStack(spacing: 0) {
-                metric("Users", snapshot.today.activeUsers, previous: snapshot.yesterdayThroughSameHour.activeUsers)
-                metric("Sessions", snapshot.today.sessions, previous: snapshot.yesterdayThroughSameHour.sessions)
-                metric("Views", snapshot.today.views, previous: snapshot.yesterdayThroughSameHour.views)
+            HStack(alignment: .firstTextBaseline) {
+                Text(current ? snapshot.weeklySessions.map(DashboardPresentation.compactNumber) ?? "—" : "—")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                Text("sessions · last 7 days").font(.system(size: 10)).foregroundStyle(.secondary)
+                Spacer()
+                if current, let total = snapshot.weeklySessions, let previous = snapshot.previousWeekSessions {
+                    Text(DashboardPresentation.weeklyChange(current: total, previous: previous))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(total >= previous ? .green : .orange)
+                }
+            }
+            if !current {
+                Text(snapshot.coreHealth.message ?? "Data is out of date. Check the connection.")
+                    .font(.system(size: 10)).foregroundStyle(.orange).lineLimit(2)
+                    .help(snapshot.coreHealth.message ?? "Data is out of date")
+                if let last = snapshot.coreHealth.lastSuccess {
+                    Text("Last success: \(DashboardPresentation.timestamp(last))")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
             }
         }
         .dashboardCard()
-    }
-
-    private func metric(_ title: String, _ value: Int, previous: Int) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(DashboardPresentation.compactNumber(value))
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-            Text(title)
-                .font(.system(size: 8, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(DashboardPresentation.delta(current: value, previous: previous))
-                .font(.system(size: 8, weight: .semibold))
-                .foregroundStyle(value >= previous ? .green : .orange)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

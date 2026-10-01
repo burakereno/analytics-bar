@@ -23,15 +23,21 @@
 ## Features
 
 - **Multi-property dashboard** — monitor multiple GA4 properties at the same time
+- **Weekly overview** — sessions over the last seven complete property-local days, compared with the preceding week, with a per-property summary
+- **Connection diagnostics in Settings** — last successful fetch and attempt per report, explicit reconnect and stale-data states, and account and site reloading
+- **Unavailable sites stay visible** — saved selections remain listed until explicitly removed, without silently dropping sites or reporting missing data as zero
+- **Independent reports** — a failed realtime report does not discard successful daily data, and vice versa
 - **Live activity** — property-summed active users, views, events, and key events from the last 30 minutes
-- **Today at a glance** — users, sessions, views, key events, honest currency-aware revenue, and same-hour comparison with yesterday
+- **Today at a glance** — users, sessions, views, key events, honest currency-aware revenue, and a separately queried same-hour comparison with yesterday
 - **Seven-day trends** — switch between users, sessions, and views; hover any bar for its date and value
 - **Property detail** — keep every selected property visible with its own live and daily metrics
 - **Top pages and sources** — inspect rankings per property instead of merging unrelated domains
-- **Configurable menu bar** — show live users, users today, sessions today, views today, or icon only
+- **Configurable menu bar** — defaults to weekly sessions; choose live users, users today, sessions today, views today, or icon only. Unavailable data shows a dash and warning instead of a misleading zero
 - **Native settings** — launch at login, Dock visibility, refresh cadence, revenue visibility, and automatic property selection changes
 - **One-click in-app updates** — validates the release manifest, SHA-256, bundle identifier, Team ID, Developer ID signature, and Gatekeeper assessment
 - **Read-only by design** — requests only the Google Analytics read-only scope and stores OAuth tokens in macOS Keychain
+
+Today shows the latest daily figures available from Google, including the current hour. Daily figures can be delayed by Google processing; a successful fetch is not a guarantee that all recent events have been processed.
 
 Combined user values are property sums. The same person may be counted by more than one property.
 

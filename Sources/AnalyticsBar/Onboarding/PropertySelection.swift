@@ -4,12 +4,17 @@ struct PropertySelection: Equatable, Sendable {
     let properties: [AnalyticsProperty]
     private(set) var selectedResourceNames: [String]
 
-    init(properties: [AnalyticsProperty], selectedResourceNames: [String]) {
+    init(properties: [AnalyticsProperty], selectedResourceNames: [String], preservesUnavailableSelections: Bool = false) {
         self.properties = properties
         let validNames = Set(properties.map(\.resourceName))
         self.selectedResourceNames = properties
             .map(\.resourceName)
             .filter { validNames.contains($0) && selectedResourceNames.contains($0) }
+        if preservesUnavailableSelections {
+            for name in selectedResourceNames where !self.selectedResourceNames.contains(name) {
+                self.selectedResourceNames.append(name)
+            }
+        }
     }
 
     mutating func toggle(_ resourceName: String) {
@@ -43,6 +48,11 @@ struct PropertySelection: Equatable, Sendable {
         selectedResourceNames = []
     }
 
+    mutating func removeUnavailable(_ resourceName: String) {
+        guard !properties.contains(where: { $0.resourceName == resourceName }) else { return }
+        selectedResourceNames.removeAll { $0 == resourceName }
+    }
+
     func isSelected(_ resourceName: String) -> Bool {
         selectedResourceNames.contains(resourceName)
     }
@@ -59,6 +69,8 @@ struct PropertySelection: Equatable, Sendable {
 
     private mutating func normalizeOrder() {
         let selected = Set(selectedResourceNames)
-        selectedResourceNames = properties.map(\.resourceName).filter(selected.contains)
+        let known = Set(properties.map(\.resourceName))
+        let unavailable = selectedResourceNames.filter { !known.contains($0) }
+        selectedResourceNames = properties.map(\.resourceName).filter(selected.contains) + unavailable
     }
 }

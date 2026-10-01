@@ -86,6 +86,48 @@ final class UpdateCheckerTests: XCTestCase {
         XCTAssertEqual(checker.state, .upToDate)
         XCTAssertNil(checker.lastError)
     }
+
+    func testCheckingAgainAfterUpToDateFindsNewRelease() async {
+        let server = MutableReleaseServer()
+        let checker = UpdateChecker(httpClient: server, currentVersion: "1.2.3")
+        await checker.checkManually()
+        XCTAssertEqual(checker.state, .upToDate)
+        await server.setVersion("1.2.4")
+        await checker.checkManually()
+        guard case let .available(release) = checker.state else { return XCTFail("Expected new release") }
+        XCTAssertEqual(release.version, "1.2.4")
+    }
+
+    func testOverlappingAutomaticAndManualChecksShareOneRequestSequence() async {
+        let server = MutableReleaseServer(delay: true)
+        let checker = UpdateChecker(httpClient: server, currentVersion: "1.2.3")
+        let automatic = Task { await checker.checkAutomatically() }
+        while checker.state != .checking { await Task.yield() }
+        await checker.checkManually()
+        await automatic.value
+        let count = await server.requestCount
+        XCTAssertEqual(count, 3)
+        XCTAssertEqual(checker.state, .upToDate)
+    }
+}
+
+private actor MutableReleaseServer: HTTPClient {
+    private var version = "1.2.3"
+    private let delay: Bool
+    private(set) var requestCount = 0
+    init(delay: Bool = false) { self.delay = delay }
+    func setVersion(_ value: String) { version = value }
+    func data(for request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        requestCount += 1
+        if request.url!.path.hasSuffix("/releases/latest") {
+            if delay { try await Task.sleep(for: .milliseconds(50)) }
+            let url = URL(string: "https://github.com/burakereno/analytics-bar/releases/tag/v\(version)")!
+            return (Data(), TestHTTPClient.response(url: url, status: 200))
+        }
+        let data = request.url!.lastPathComponent.hasSuffix(".json")
+            ? try JSONEncoder().encode(makeManifest(version: version)) : Data()
+        return (data, TestHTTPClient.response(url: request.url!, status: 200))
+    }
 }
 
 private enum UpdateEndpointFailure: CaseIterable {

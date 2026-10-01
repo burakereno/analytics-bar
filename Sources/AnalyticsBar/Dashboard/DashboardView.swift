@@ -92,6 +92,9 @@ struct DashboardView: View {
                 Divider().opacity(0.45)
                 SettingsFooterView(
                     isRefreshing: model.isRefreshing,
+                    canRefresh: !model.isChoosingProperties
+                        && !model.isDisconnecting
+                        && !preferences.selectedPropertyResourceNames.isEmpty,
                     refresh: { Task { await model.refresh(trigger: .manual) } }
                 )
                 .onGeometryChange(for: CGFloat.self) { proxy in
@@ -172,38 +175,46 @@ struct DashboardView: View {
 
     private func loadedDashboard(_ snapshot: CombinedDashboardSnapshot) -> some View {
         LazyVStack(spacing: 10) {
-                if let error = model.lastManualError {
-                    Label(error, systemImage: "exclamationmark.triangle.fill")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(10)
-                        .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+            LiveSummaryCard(snapshot: snapshot, now: model.presentationDate, maximumAge: model.maximumDataAge)
+            WeeklySummaryCard(snapshot: snapshot, now: model.presentationDate, maximumAge: model.maximumDataAge)
+
+            if !model.isRefreshing,
+               model.connectionError != nil || model.needsReconnection
+               || !snapshot.hasCurrentCore(at: model.presentationDate, maximumAge: model.maximumDataAge)
+               || !snapshot.hasCurrentRealtime(at: model.presentationDate, maximumAge: model.maximumDataAge) {
+                Button {
+                    withAnimation(transitionAnimation) { showingSettings = true }
+                } label: {
+                    HStack(spacing: 6) {
+                        Label(model.needsReconnection ? "Reconnect to Google" : "Reports need attention",
+                              systemImage: "exclamationmark.triangle")
+                        Spacer()
+                        Text("Settings")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 2)
+                    .padding(.vertical, 2)
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Reports need attention. Open connection settings")
+            }
 
-                HStack {
-                    Text("ALL PROPERTIES")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
+            ForEach(snapshot.properties) { property in
+                PropertySummaryCard(snapshot: property, now: model.presentationDate, maximumAge: model.maximumDataAge)
+            }
 
-                LiveSummaryCard(snapshot: snapshot)
-
-                ForEach(snapshot.properties) { property in
-                    PropertySummaryCard(snapshot: property)
-                }
-
-                TodayMetricsCard(snapshot: snapshot, showsRevenue: preferences.showsRevenue)
-                SevenDayTrendCard(snapshot: snapshot)
-                BreakdownCard(snapshots: snapshot.properties)
-                DashboardStatusView(snapshot: snapshot, isRefreshing: model.isRefreshing)
-                DashboardFooterView(
-                    isRefreshing: model.isRefreshing,
-                    refresh: { Task { await model.refresh(trigger: .manual) } },
-                    updateChecker: updateChecker,
-                    updateInstaller: updateInstaller
-                )
+            SevenDayTrendCard(snapshot: snapshot, now: model.presentationDate, maximumAge: model.maximumDataAge)
+            TodayMetricsCard(snapshot: snapshot, showsRevenue: preferences.showsRevenue,
+                             now: model.presentationDate, maximumAge: model.maximumDataAge)
+            BreakdownCard(snapshots: snapshot.properties, now: model.presentationDate, maximumAge: model.maximumDataAge)
+            DashboardFooterView(
+                isRefreshing: model.isRefreshing,
+                refresh: { Task { await model.refresh(trigger: .manual) } },
+                updateChecker: updateChecker, updateInstaller: updateInstaller
+            )
         }
         .padding(12)
     }

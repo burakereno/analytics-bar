@@ -15,9 +15,15 @@ struct SettingsView: View {
                 SettingsToggleRow(
                     icon: "power",
                     title: "Open at Login",
-                    subtitle: "Open Analytics Bar when you log in",
-                    isOn: $preferences.opensAtLogin
+                    subtitle: systemSettings.launchAtLoginSubtitle,
+                    isOn: $preferences.opensAtLogin,
+                    isEnabled: !systemSettings.isUpdatingLaunchAtLogin && systemSettings.launchAtLoginStatus != .unavailable
                 )
+                if systemSettings.launchAtLoginStatus == .requiresApproval {
+                    Button("Open macOS Settings") { systemSettings.openLoginItemSettings() }
+                        .buttonStyle(.plain).font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.orange).padding(.top, 6)
+                }
                 if let error = systemSettings.launchAtLoginError {
                     SettingsErrorText(message: error)
                 }
@@ -45,8 +51,8 @@ struct SettingsView: View {
             SettingsSectionCard("REFRESH") {
                 SettingsSegmentedRow(
                     icon: "arrow.clockwise",
-                    title: "Background",
-                    subtitle: "Every 60 seconds while this panel is open",
+                    title: "Panel closed",
+                    subtitle: "Panel open: every 60 seconds",
                     options: BackgroundRefreshInterval.allCases,
                     selection: $preferences.backgroundRefreshInterval,
                     optionTitle: { $0.shortTitle }
@@ -67,7 +73,8 @@ struct SettingsView: View {
                     icon: "dock.rectangle",
                     title: "Dock Icon",
                     subtitle: "Show Analytics Bar in the Dock",
-                    isOn: $preferences.showsDockIcon
+                    isOn: $preferences.showsDockIcon,
+                    isEnabled: !systemSettings.isUpdatingDockIcon
                 )
                 if let error = systemSettings.dockIconError {
                     SettingsErrorText(message: error)
@@ -83,12 +90,14 @@ struct SettingsView: View {
         .padding(.bottom, 12)
         .tint(.orange)
         .accentColor(.orange)
+        .onAppear { systemSettings.synchronizeSystemSettings() }
     }
 }
 
 extension MenuBarMetric {
     var title: String {
         switch self {
+        case .sessionsLast7Days: "Sessions · last 7 days"
         case .realtimeActiveUsers: "Live active users"
         case .usersToday: "Users today"
         case .sessionsToday: "Sessions today"

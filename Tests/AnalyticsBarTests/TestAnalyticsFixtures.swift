@@ -28,7 +28,8 @@ enum TestAnalyticsFixtures {
             yesterdayThroughSameHour: .zero,
             sevenDay: [AnalyticsDay(year: 2026, month: 8, day: 10): totals],
             topPages: [],
-            topSources: []
+            topSources: [], todayThroughSameHour: totals,
+            weeklySessions: totals.sessions, previousWeekSessions: totals.sessions / 2
         )
     }
 
@@ -45,7 +46,8 @@ enum TestAnalyticsFixtures {
             topSources: [],
             fetchedAt: Date(timeIntervalSince1970: 1_000),
             freshness: freshness,
-            refreshMessage: nil
+            refreshMessage: nil, todayThroughSameHour: core.todayThroughSameHour,
+            weeklySessions: core.weeklySessions, previousWeekSessions: core.previousWeekSessions
         )
     }
 }

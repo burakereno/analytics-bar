@@ -168,6 +168,7 @@ struct SettingsErrorText: View {
 
 struct SettingsFooterView: View {
     let isRefreshing: Bool
+    let canRefresh: Bool
     let refresh: () -> Void
 
     var body: some View {
@@ -179,10 +180,11 @@ struct SettingsFooterView: View {
                     } else {
                         Image(systemName: "arrow.clockwise.circle")
                     }
-                    Text("Refresh")
+                    Text("Refresh data")
                 }
             }
-            .disabled(isRefreshing)
+            .disabled(isRefreshing || !canRefresh)
+            .help("Refresh reports for the selected sites")
 
             Spacer()
 

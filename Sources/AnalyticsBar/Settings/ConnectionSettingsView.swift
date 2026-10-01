@@ -6,20 +6,25 @@ struct ConnectionSettingsView: View {
     @State private var confirmsDisconnect = false
 
     private var connectionLabel: String {
+        if model.isDisconnecting { return "Disconnecting…" }
+        if model.isRefreshing { return "Checking…" }
+        if model.needsReconnection { return "Reconnect required" }
+        if model.connectionError != nil { return "Needs attention" }
+        if let snapshot = model.snapshot,
+           (!snapshot.hasCurrentCore(at: model.presentationDate, maximumAge: model.maximumDataAge)
+            || !snapshot.hasCurrentRealtime(at: model.presentationDate, maximumAge: model.maximumDataAge)) {
+            return "Reports need attention"
+        }
         switch model.state {
-        case .disconnected: "Not connected"
-        case .loading: "Connecting…"
-        case .failed: "Needs attention"
-        default: "Connected to Google Analytics"
+        case .disconnected: return "Not connected"
+        case .loading: return "Connecting…"
+        case .failed: return "Needs attention"
+        default: return "Connected"
         }
     }
 
     private var connectionColor: Color {
-        switch model.state {
-        case .disconnected: .secondary
-        case .failed: .red
-        default: .green
-        }
+        connectionLabel == "Connected" ? .green : .orange
     }
 
     var body: some View {
@@ -28,7 +33,7 @@ struct ConnectionSettingsView: View {
                 SettingsRowLabel(
                     icon: "link.circle",
                     title: "Google Analytics",
-                    subtitle: model.connectionIssue?.message ?? "Read-only GA4 access"
+                    subtitle: "Read-only GA4 access"
                 )
                 Spacer(minLength: 8)
                 HStack(spacing: 5) {
@@ -47,6 +52,11 @@ struct ConnectionSettingsView: View {
             SettingsRowDivider()
 
             HStack(spacing: 14) {
+                Button("Reload accounts & sites") { Task { await model.checkConnection() } }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 10, weight: .semibold))
+                    .disabled(model.isRefreshing || model.isDisconnecting || model.isChoosingProperties)
+                    .help("Reload your Google accounts, site list and Analytics reports")
                 Spacer()
                 Button("Reconnect") {
                     close()
@@ -55,7 +65,7 @@ struct ConnectionSettingsView: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(.orange)
-                .disabled(model.isRefreshing)
+                .disabled(model.isRefreshing || model.isDisconnecting)
 
                 Button("Disconnect…", role: .destructive) {
                     confirmsDisconnect = true
@@ -63,14 +73,22 @@ struct ConnectionSettingsView: View {
                 .buttonStyle(.plain)
                 .font(.system(size: 9.5, weight: .semibold))
                 .foregroundStyle(model.state == .disconnected ? Color.secondary : Color.red)
-                .disabled(model.state == .disconnected)
+                .disabled(model.state == .disconnected || model.isRefreshing || model.isDisconnecting)
             }
             .padding(.vertical, 2)
+
+            if let error = model.connectionError ?? model.connectionIssue?.message {
+                Text(error).font(.system(size: 10)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 8)
+            }
+            if let snapshot = model.snapshot {
+                SettingsRowDivider()
+                ReportStatusSettingsView(model: model, snapshot: snapshot)
+            }
         }
         .alert("Disconnect Google Analytics?", isPresented: $confirmsDisconnect) {
             Button("Cancel", role: .cancel) {}
             Button("Disconnect", role: .destructive) {
-                close()
                 Task { await model.disconnect() }
             }
         } message: {

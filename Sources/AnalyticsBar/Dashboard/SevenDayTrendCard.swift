@@ -11,6 +11,8 @@ struct SevenDayTrendCard: View {
     }
 
     let snapshot: CombinedDashboardSnapshot
+    let now: Date
+    let maximumAge: TimeInterval
     @State private var metric: TrendMetric = .sessions
 
     private var points: [SevenDayTrendPoint] {
@@ -45,7 +47,7 @@ struct SevenDayTrendCard: View {
                 HStack(spacing: 7) {
                     Image(systemName: "chart.bar")
                         .foregroundStyle(.green)
-                    Text("LAST 7 DAYS")
+                    Text("LAST 7 COMPLETE DAYS")
                         .foregroundStyle(.primary)
                 }
                 .font(.system(size: 11, weight: .bold))
@@ -59,12 +61,13 @@ struct SevenDayTrendCard: View {
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .frame(width: 178)
+                .frame(width: 150)
                 .controlSize(.mini)
                 .tint(.orange)
                 .accessibilityLabel("Trend metric")
             }
 
+            if snapshot.hasCurrentCore(at: now, maximumAge: maximumAge) {
             HStack(alignment: .bottom, spacing: 5) {
                 ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
                     SevenDayTrendBarView(
@@ -78,6 +81,11 @@ struct SevenDayTrendCard: View {
             }
             .frame(height: 86, alignment: .bottom)
             .animation(.snappy(duration: 0.24), value: metric)
+            } else {
+                Text("Trend unavailable. Check the connection to fetch current data.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 60, alignment: .leading)
+            }
 
             Text("Each property uses its Analytics reporting time zone")
                 .font(.system(size: 8))

@@ -6,6 +6,8 @@ enum LaunchAtLoginStatus: Equatable, Sendable {
     case enabled
     case requiresApproval
     case unavailable
+
+    var isRegistered: Bool { self == .enabled || self == .requiresApproval }
 }
 
 @MainActor
@@ -47,6 +49,14 @@ final class LaunchAtLoginPreference: ObservableObject {
         let resolvedService = service ?? MainAppLaunchAtLoginService()
         self.service = resolvedService
         status = resolvedService.status
+    }
+
+    func refreshStatus() {
+        status = service.status
+    }
+
+    func openSystemSettings() {
+        SMAppService.openSystemSettingsLoginItems()
     }
 
     func setEnabled(_ enabled: Bool) async {

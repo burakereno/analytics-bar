@@ -24,6 +24,7 @@ final class UpdateChecker: ObservableObject {
 
     private let httpClient: any HTTPClient
     private let currentVersion: String
+    private var isChecking = false
     private let latestReleaseURL = URL(
         string: "https://github.com/\(AppConfiguration.githubOwner)/\(AppConfiguration.githubRepo)/releases/latest"
     )!
@@ -37,7 +38,11 @@ final class UpdateChecker: ObservableObject {
     }
 
     func checkAutomatically() async {
+        guard !isChecking else { return }
+        isChecking = true
+        defer { isChecking = false }
         let stableState = state
+        state = .checking
         do {
             let release = try await fetchLatestRelease()
             state = Self.isVersion(release.version, newerThan: currentVersion)
@@ -51,6 +56,9 @@ final class UpdateChecker: ObservableObject {
     }
 
     func checkManually() async {
+        guard !isChecking else { return }
+        isChecking = true
+        defer { isChecking = false }
         state = .checking
         lastError = nil
         do {

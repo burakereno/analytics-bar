@@ -58,7 +58,7 @@ final class DashboardAggregatorTests: XCTestCase {
         )
     }
 
-    func testZeroRevenueIsNotPresented() throws {
+    func testZeroRevenueRetainsItsCurrencyForTheRevenuePreference() throws {
         let value = try snapshot(
             property: property(id: "101", currency: "USD"),
             activeUsers: 1,
@@ -67,7 +67,17 @@ final class DashboardAggregatorTests: XCTestCase {
             day: "20260809"
         )
 
-        XCTAssertEqual(DashboardAggregator.aggregate([value]).revenue, .none)
+        XCTAssertEqual(DashboardAggregator.aggregate([value]).revenue, .single(currencyCode: "USD", amount: 0))
+    }
+
+    func testZeroRevenueInDifferentCurrenciesIsNotCombined() throws {
+        let first = try snapshot(property: property(id: "1", currency: "USD"), activeUsers: 0,
+                                 sessions: 0, revenue: 0, day: "20260930")
+        let second = try snapshot(property: property(id: "2", currency: "TRY"), activeUsers: 0,
+                                  sessions: 0, revenue: 0, day: "20260930")
+        XCTAssertEqual(DashboardAggregator.aggregate([first, second]).revenue, .mixed([
+            CurrencyAmount(currencyCode: "TRY", amount: 0), CurrencyAmount(currencyCode: "USD", amount: 0)
+        ]))
     }
 
     private func property(id: String, currency: String) -> AnalyticsProperty {

@@ -12,6 +12,8 @@ struct AnalyticsReportResponse: Decodable, Sendable {
     let dimensionHeaders: [DimensionHeader]?
     let metricHeaders: [MetricHeader]?
     let rows: [Row]?
+    let kind: String?
+    let rowCount: Int?
 }
 
 struct AnalyticsBatchReportResponse: Decodable, Sendable {
@@ -30,6 +32,13 @@ struct AnalyticsReportTable: Sendable {
     }
 
     var rows: [AnalyticsReportResponse.Row] { response.rows ?? [] }
+
+    func requireHeaders(metrics: [String], dimensions: [String] = []) throws {
+        guard metrics.allSatisfy({ metricIndices[$0] != nil }),
+              dimensions.allSatisfy({ dimensionIndices[$0] != nil }) else {
+            throw GoogleAPIError.invalidResponse
+        }
+    }
 
     func dimension(_ name: String, in row: AnalyticsReportResponse.Row) throws -> String {
         guard let index = dimensionIndices[name],

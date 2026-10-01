@@ -31,13 +31,15 @@ struct UpdateSettingsView: View {
                 SettingsErrorText(message: message)
             }
 
-            Link(
-                "Privacy",
-                destination: URL(string: "https://github.com/burakereno/analytics-bar/blob/main/docs/privacy.md")!
-            )
-            .font(.system(size: 9, weight: .semibold))
-            .foregroundStyle(.orange)
-            .padding(.top, 7)
+            HStack {
+                Link("Privacy", destination: URL(string: "https://github.com/burakereno/analytics-bar/blob/main/docs/privacy.md")!)
+                    .foregroundStyle(.orange)
+                Spacer()
+                Button("Check for Updates") { Task { await checker.checkManually() } }
+                    .buttonStyle(.plain)
+                    .disabled(checker.state == .checking || installer.isBusy)
+            }
+            .font(.system(size: 9, weight: .semibold)).padding(.top, 8)
         }
     }
 
@@ -73,15 +75,7 @@ struct UpdateSettingsView: View {
                 .padding(.vertical, 5)
                 .background(.orange, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             case .idle, .failed:
-                Button("Check for Updates") {
-                    Task { await checker.checkManually() }
-                }
-                .buttonStyle(.plain)
-                .font(.system(size: 8.5, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                EmptyView()
             }
         }
     }

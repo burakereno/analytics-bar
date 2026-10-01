@@ -83,57 +83,86 @@ actor AnalyticsRepository: AnalyticsRepositoryProtocol {
         )
 
         if outcomes.contains(where: \.isAuthorizationExpired) {
-            token = try await oauthSession.forceRefreshAccessToken()
-            outcomes = await refreshCoordinator.refresh(
-                properties: properties,
-                accessToken: token,
-                now: now
-            )
-            if outcomes.contains(where: \.isAuthorizationExpired) {
-                throw AnalyticsRepositoryError.authorizationExpired
+            do {
+                token = try await oauthSession.forceRefreshAccessToken()
+                let retried = await refreshCoordinator.refresh(properties: properties, accessToken: token, now: now)
+                outcomes = zip(retried, outcomes).map { $0.preservingSuccesses(from: $1) }
+            } catch {
+                // Keep any successful reports. Expired reports remain visible and request reconnection.
             }
         }
 
         let cached = try await cache.load()
-        var snapshots: [PropertyDashboardSnapshot] = []
-        for outcome in outcomes {
-            switch outcome {
-            case let .success(snapshot):
-                snapshots.append(snapshot)
-            case let .failure(property, failure):
-                if let cachedSnapshot = cached[property.resourceName] {
-                    snapshots.append(cachedSnapshot.markedStale(message: failure.message))
-                }
-            }
+        let snapshots = outcomes.map { outcome in
+            makeSnapshot(outcome, cached: cached[outcome.property.resourceName], now: now)
         }
-
-        guard !snapshots.isEmpty else {
-            if let message = outcomes.compactMap(\.requestFailureMessage).first {
-                throw AnalyticsRepositoryError.requestFailed(message)
-            }
-            throw AnalyticsRepositoryError.noData
-        }
-        try await cache.save(snapshots)
+        var updatedCache = cached
+        for snapshot in snapshots { updatedCache[snapshot.property.resourceName] = snapshot }
+        try await cache.save(updatedCache.values.sorted { $0.property.resourceName < $1.property.resourceName })
         return DashboardAggregator.aggregate(snapshots)
+    }
+
+    private func makeSnapshot(_ outcome: PropertyRefreshOutcome, cached: PropertyDashboardSnapshot?, now: Date) -> PropertyDashboardSnapshot {
+        var live = cached?.live ?? .zero
+        var report = PropertyCoreReport(
+            today: cached?.today ?? .zero,
+            yesterdayThroughSameHour: cached?.yesterdayThroughSameHour ?? .zero,
+            sevenDay: cached?.sevenDay ?? [:], topPages: cached?.topPages ?? [], topSources: cached?.topSources ?? [],
+            todayThroughSameHour: cached?.todayThroughSameHour,
+            weeklySessions: cached?.weeklySessions, previousWeekSessions: cached?.previousWeekSessions
+        )
+        let unknown = ReportStatus(lastSuccess: nil, lastAttempt: nil, message: nil, verified: false)
+        let liveStatus: ReportStatus
+        let coreStatus: ReportStatus
+        switch outcome.realtime {
+        case let .success(value):
+            live = value
+            liveStatus = .success(at: now)
+        case let .failure(error):
+            liveStatus = (cached?.realtimeHealth ?? unknown).invalidated(
+                message: error.message, attemptedAt: now, requiresReconnection: error == .authorizationExpired
+            )
+        }
+        switch outcome.core {
+        case let .success(value):
+            report = value
+            coreStatus = .success(at: now)
+        case let .failure(error):
+            coreStatus = (cached?.coreHealth ?? unknown).invalidated(
+                message: error.message, attemptedAt: now, requiresReconnection: error == .authorizationExpired
+            )
+        }
+        return PropertyDashboardSnapshot(
+            property: outcome.property, live: live, today: report.today,
+            yesterdayThroughSameHour: report.yesterdayThroughSameHour, sevenDay: report.sevenDay,
+            topPages: report.topPages, topSources: report.topSources,
+            fetchedAt: [liveStatus.lastSuccess, coreStatus.lastSuccess].compactMap { $0 }.min() ?? .distantPast,
+            freshness: outcome.failures.isEmpty ? .live : .stale,
+            refreshMessage: outcome.failures.map(\.message).joined(separator: " · ").nilIfEmpty,
+            realtimeStatus: liveStatus, coreStatus: coreStatus,
+            todayThroughSameHour: report.todayThroughSameHour,
+            weeklySessions: report.weeklySessions, previousWeekSessions: report.previousWeekSessions
+        )
     }
 
     func cachedSnapshot(resourceNames: [String]? = nil) async -> CombinedDashboardSnapshot? {
         guard let values = try? await cache.load(), !values.isEmpty else { return nil }
         let names = resourceNames ?? Array(values.keys).sorted()
-        let snapshots = names.compactMap { values[$0] }
+        let snapshots = names.compactMap { values[$0]?.markedStale(message: "Saved data; waiting for a successful refresh.") }
         guard !snapshots.isEmpty else { return nil }
         return DashboardAggregator.aggregate(snapshots)
     }
 
     func disconnect() async throws {
-        try await oauthSession.signOut()
-        try await cache.clear()
+        var failures: [String] = []
+        do { try await oauthSession.signOut() }
+        catch { failures.append("Google authorization: \(error.localizedDescription)") }
+        do { try await cache.clear() }
+        catch { failures.append("Saved reports: \(error.localizedDescription)") }
+        if !failures.isEmpty { throw AnalyticsRepositoryError.requestFailed(failures.joined(separator: " · ")) }
     }
 }
 
-private extension PropertyRefreshOutcome {
-    var requestFailureMessage: String? {
-        guard case let .failure(_, .requestFailed(message)) = self else { return nil }
-        return message
-    }
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
 }

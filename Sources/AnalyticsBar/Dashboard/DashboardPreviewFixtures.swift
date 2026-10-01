@@ -4,12 +4,30 @@ enum DashboardPreviewFixtures {
     static func snapshots(named name: String) -> [PropertyDashboardSnapshot]? {
         let count: Int
         switch name {
-        case "one": count = 1
-        case "three": count = 3
+        case "one", "zero", "expired", "realtime-failed", "login-approval": count = 1
+        case "three", "missing-site": count = 3
         case "eight": count = 8
         default: return nil
         }
-        return (1...count).map(snapshot)
+        return (1...count).map { index in
+            var value = snapshot(index: index)
+            if name == "zero" {
+                value = PropertyDashboardSnapshot(property: value.property, live: .zero, today: .zero,
+                    yesterdayThroughSameHour: .zero, sevenDay: value.sevenDay.mapValues { _ in .zero },
+                    topPages: [], topSources: [], fetchedAt: Date(), freshness: .live, refreshMessage: nil,
+                    todayThroughSameHour: .zero, weeklySessions: 0, previousWeekSessions: 0)
+            }
+            if name == "expired" {
+                let old = ReportStatus.success(at: Date().addingTimeInterval(-86_400 * 31))
+                value.coreStatus = old.invalidated(message: "Google authorization expired. Please reconnect.", attemptedAt: Date(), requiresReconnection: true)
+                value.realtimeStatus = value.coreStatus
+            }
+            if name == "realtime-failed" {
+                value.realtimeStatus = ReportStatus.success(at: Date().addingTimeInterval(-86_400 * 31))
+                    .invalidated(message: "Realtime report could not be read.", attemptedAt: Date())
+            }
+            return value
+        }
     }
 
     private static func snapshot(index: Int) -> PropertyDashboardSnapshot {
@@ -31,9 +49,13 @@ enum DashboardPreviewFixtures {
             keyEvents: Decimal(active * 2),
             revenue: index <= 2 ? Decimal(active * 48) : 0
         )
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: property.timeZoneIdentifier) ?? .gmt
         let days = Dictionary(uniqueKeysWithValues: (0..<7).map { offset in
-            (
-                AnalyticsDay(year: 2026, month: 8, day: 4 + offset),
+            let date = calendar.date(byAdding: .day, value: offset - 7, to: Date())!
+            let parts = calendar.dateComponents([.year, .month, .day], from: date)
+            return (
+                AnalyticsDay(year: parts.year!, month: parts.month!, day: parts.day!),
                 MetricTotals(
                     activeUsers: active * (offset + 5),
                     sessions: active * (offset + 7),
@@ -74,7 +96,10 @@ enum DashboardPreviewFixtures {
             ],
             fetchedAt: Date(),
             freshness: index == 3 ? .stale : .live,
-            refreshMessage: index == 3 ? "Using cached data" : nil
+            refreshMessage: index == 3 ? "Using cached data" : nil,
+            todayThroughSameHour: today,
+            weeklySessions: days.values.reduce(0) { $0 + $1.sessions },
+            previousWeekSessions: days.values.reduce(0) { $0 + $1.sessions } * 4 / 5
         )
     }
 }

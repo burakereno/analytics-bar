@@ -52,10 +52,11 @@ fi
 [[ -f "$UPDATE_HELPER" ]] || { echo "Update helper not found: $UPDATE_HELPER" >&2; exit 1; }
 
 swift build -c release
+BUILD_DIR="$(swift build -c release --show-bin-path)"
 
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
-cp "$ROOT_DIR/.build/release/$EXECUTABLE_NAME" "$MACOS_DIR/$EXECUTABLE_NAME"
+cp "$BUILD_DIR/$EXECUTABLE_NAME" "$MACOS_DIR/$EXECUTABLE_NAME"
 chmod +x "$MACOS_DIR/$EXECUTABLE_NAME"
 cp "$APP_ICON" "$RESOURCES_DIR/AppIcon.icns"
 cp "$UPDATE_HELPER" "$RESOURCES_DIR/install-update.sh"
